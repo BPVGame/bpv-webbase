@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "./node_modules/.bin/vite",
     "build": "./node_modules/.bin/tsc && ./node_modules/.bin/vite build",
-    "preview": "./node_modules/.bin/vite preview"
+    "preview": "./node_modules/.bin/vite preview",
+    "server": "./node_modules/.bin/tsx server/index.ts"
   },
   "dependencies": {
     "canvas-confetti": "^1.9.4",

@@ -227,6 +227,52 @@ app.get('/api/players/nearby', async (req, res) => {
   }
 });
 
+// 8. Multiplayer presence heartbeat (IsoEarth / Outdoor GPS foundation)
+// In-memory presence map — replace with Redis for multi-instance scale.
+type Presence = {
+  id: string;
+  username: string;
+  district: string;
+  col: number;
+  row: number;
+  lat?: number;
+  lng?: number;
+  updatedAt: number;
+};
+const presenceByUser = new Map<string, Presence>();
+const PRESENCE_TTL_MS = 15_000;
+
+app.post('/api/multiplayer/heartbeat', (req, res) => {
+  const { username, district, col, row, lat, lng } = req.body || {};
+  if (!username || district == null || col == null || row == null) {
+    return res.status(400).json({ error: 'Missing presence fields' });
+  }
+
+  const id = String(username);
+  const now = Date.now();
+  presenceByUser.set(id, {
+    id,
+    username: String(username),
+    district: String(district),
+    col: Number(col),
+    row: Number(row),
+    lat: lat != null ? Number(lat) : undefined,
+    lng: lng != null ? Number(lng) : undefined,
+    updatedAt: now
+  });
+
+  // Evict stale
+  for (const [key, p] of presenceByUser) {
+    if (now - p.updatedAt > PRESENCE_TTL_MS) presenceByUser.delete(key);
+  }
+
+  const nearby = [...presenceByUser.values()]
+    .filter(p => p.id !== id && p.district === String(district))
+    .map(({ id, username, col, row }) => ({ id, username, col, row }));
+
+  res.json({ ok: true, nearby });
+});
+
 app.listen(PORT, () => {
   console.log(`BPV Game Server running on port ${PORT}`);
 });
