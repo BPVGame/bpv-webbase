@@ -261,8 +261,8 @@ export class IsoEarth {
     this.ctx.fillRect(0, 0, width, height);
 
     // Stream chunks sized to the viewport so no map edge appears on screen
-    const viewCols = Math.ceil(width / (this.tileW / 2)) + 6;
-    const viewRows = Math.ceil(height / (this.tileH / 2)) + 8;
+    const viewCols = Math.ceil(width / (this.tileW / 2)) + 14;
+    const viewRows = Math.ceil(height / (this.tileH / 2)) + 16;
     const chunkNeed = Math.ceil(Math.max(viewCols, viewRows) / 16) + 1;
     this.world.loadRadius = chunkNeed;
     this.world.unloadRadius = chunkNeed + 1;
