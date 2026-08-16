@@ -14,21 +14,22 @@
 | Location | Geolocation API `LocationService` | Core Location `LocationManager` |
 | Backend | Express + Neon Postgres | same **bpvgame.com** API |
 
-## IsoEarth
+## IsoEarth (infinite)
 
-Inspired by isometric world-builders such as [isomiddleearth](https://github.com/hasanharman/isomiddleearth):
+Chunk-based open world — no finite square boundary:
 
-- District **realms** (City Center, Pixel Harbor, Central Park, …)
-- Grouped tile catalog (Terrain, Water, Trees, Buildings, Decorations)
-- JSON map schema + **Tiled Map Editor** export/import (`.tmj`)
-- Procedural 16-bit isometric diamonds (shared tile IDs with iOS)
+- `WorldGen.ts` — deterministic tile from world `(x, y)`
+- `ChunkWorld.ts` — load/unload `16×16` chunks around the player
+- Rivers, roads, and forests are continuous across chunk borders
+- District travel warps to distant origins on the same infinite plane
 
 Key files:
 
-- `src/game/iso/IsoEarth.ts` — isometric engine
+- `src/game/iso/IsoEarth.ts` — isometric engine + camera follow
+- `src/game/iso/WorldGen.ts` — infinite terrain
+- `src/game/iso/ChunkWorld.ts` — chunk streaming
 - `src/game/iso/IsoTiles.ts` — tile catalog
-- `src/game/iso/IsoMapData.ts` — map format + generators
-- `src/game/iso/TiledMapLoader.ts` — Tiled bridge
+- `src/game/iso/TiledMapLoader.ts` — Tiled bridge (authored pockets / POIs)
 - `maps/city-center.tmj` — sample Tiled map
 
 ## Emoji Design Fish Cards

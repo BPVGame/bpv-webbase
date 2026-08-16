@@ -1,7 +1,6 @@
 import React, { useEffect, useImperativeHandle, forwardRef, useRef, useState } from 'react';
 import { IsoEarth } from '../game/iso/IsoEarth';
 import { DistrictRealm } from '../game/iso/IsoTiles';
-import { generateStarterEarth } from '../game/iso/IsoMapData';
 import { multiplayerSync } from '../game/MultiplayerSync';
 
 export interface IsoEarthViewHandle {
@@ -31,7 +30,7 @@ export const IsoEarthView = forwardRef<IsoEarthViewHandle, IsoEarthViewProps>(
       loadDistrict: (next: DistrictRealm) => {
         setRealm(next);
         onDistrictChange?.(next);
-        earthRef.current?.loadMap(generateStarterEarth(next, 18));
+        earthRef.current?.warpToDistrict(next);
       },
       setJoystick: (dir: { x: number; y: number }) => {
         if (earthRef.current) earthRef.current.joystickDir = dir;
@@ -48,7 +47,7 @@ export const IsoEarthView = forwardRef<IsoEarthViewHandle, IsoEarthViewProps>(
       };
       resize();
 
-      const earth = new IsoEarth(canvas, generateStarterEarth('city_center', 18));
+      const earth = new IsoEarth(canvas, 'city_center');
       earth.setAvatar(avatar);
       earthRef.current = earth;
       earth.start();

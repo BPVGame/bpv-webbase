@@ -1,10 +1,11 @@
 /**
- * IsoEarth — full-screen cozy 16-bit isometric RPG world.
- * Soft sage/cream palette, camera-follow, detailed props (houses, trees, lamps).
+ * IsoEarth — full-screen cozy 16-bit isometric RPG on an infinite chunk world.
+ * Visual style unchanged; map is seamless WorldX/Y → Chunk → Tile streaming.
  */
 
 import { ISO_PALETTE, ISO_TILE_BY_ID, DistrictRealm } from './IsoTiles';
-import { BpvIsoMap, loadIsoMapFromJson, generateStarterEarth } from './IsoMapData';
+import { ChunkWorld } from './ChunkWorld';
+import { DISTRICT_ORIGINS } from './WorldGen';
 
 export interface IsoPlayerAvatar {
   username: string;
@@ -26,14 +27,15 @@ export interface RemotePlayer {
 export class IsoEarth {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
-  public map: BpvIsoMap;
+  public world: ChunkWorld;
 
-  /** Classic 2:1 isometric diamond — slightly larger for full-screen cozy feel. */
+  /** Classic 2:1 isometric diamond. */
   public tileW = 72;
   public tileH = 36;
 
-  public playerCol = 6;
-  public playerRow = 6;
+  /** Absolute world tile coordinates (infinite). */
+  public playerCol = 0;
+  public playerRow = 0;
   public playerFacing: 'ne' | 'nw' | 'se' | 'sw' = 'se';
   public isMoving = false;
   public walkFrame = 0;
@@ -60,28 +62,35 @@ export class IsoEarth {
   private waterPhase = 0;
   private smokePhase = 0;
 
-  constructor(canvas: HTMLCanvasElement, map?: BpvIsoMap) {
+  constructor(canvas: HTMLCanvasElement, realm: DistrictRealm = 'city_center') {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d')!;
     this.ctx.imageSmoothingEnabled = false;
-    this.map = map ?? generateStarterEarth('city_center', 18);
-    this.realm = this.map.location;
-    this.playerCol = this.map.spawn.col;
-    this.playerRow = this.map.spawn.row;
+    this.world = new ChunkWorld(realm);
+    this.realm = realm;
+    this.warpToDistrict(realm, true);
     this.setupInputs();
-    this.syncCamera(true);
   }
 
-  public loadMap(map: BpvIsoMap) {
-    this.map = map;
-    this.realm = map.location;
-    this.playerCol = map.spawn.col;
-    this.playerRow = map.spawn.row;
-    this.syncCamera(true);
+  /** Travel to a district region of the infinite plane (keeps seamless world). */
+  public warpToDistrict(realm: DistrictRealm, snapCamera = true) {
+    this.realm = realm;
+    this.world.setRealm(realm);
+    const origin = DISTRICT_ORIGINS[realm] || DISTRICT_ORIGINS.city_center;
+    this.playerCol = origin.x;
+    this.playerRow = origin.y;
+    this.findNearestWalkable();
+    this.world.syncAround(this.playerCol, this.playerRow);
+    this.syncCamera(snapCamera);
   }
 
-  public loadMapJson(json: unknown) {
-    this.loadMap(loadIsoMapFromJson(json));
+  /** @deprecated finite maps removed — use warpToDistrict */
+  public loadMap(_map?: unknown) {
+    this.warpToDistrict(this.realm);
+  }
+
+  public loadMapJson(_json?: unknown) {
+    this.warpToDistrict(this.realm);
   }
 
   public setAvatar(avatar: IsoPlayerAvatar) {
@@ -94,6 +103,23 @@ export class IsoEarth {
 
   public recenterOrigin() {
     this.syncCamera(true);
+  }
+
+  private findNearestWalkable() {
+    if (this.world.isWalkable(this.playerCol, this.playerRow)) return;
+    for (let r = 1; r < 24; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          const x = this.playerCol + dx;
+          const y = this.playerRow + dy;
+          if (this.world.isWalkable(x, y)) {
+            this.playerCol = x;
+            this.playerRow = y;
+            return;
+          }
+        }
+      }
+    }
   }
 
   private setupInputs() {
@@ -175,12 +201,13 @@ export class IsoEarth {
         this.playerFacing = 'sw';
       }
 
-      if (this.canWalk(ncol, nrow)) {
+      if (this.world.isWalkable(ncol, nrow)) {
         this.playerCol = ncol;
         this.playerRow = nrow;
         this.isMoving = true;
         this.walkFrame += 1;
         this.moveCooldown = 0.12;
+        this.world.syncAround(this.playerCol, this.playerRow);
       }
     } else if (dx === 0 && dy === 0) {
       this.isMoving = false;
@@ -189,13 +216,6 @@ export class IsoEarth {
     this.syncCamera(false);
   }
 
-  private canWalk(col: number, row: number): boolean {
-    if (row < 0 || col < 0 || row >= this.map.gridSize || col >= this.map.gridSize) return false;
-    const def = ISO_TILE_BY_ID[this.map.tiles[row][col]];
-    return def ? def.walkable : false;
-  }
-
-  /** World-space tile center → screen before camera. */
   private tileWorld(col: number, row: number): { x: number; y: number } {
     return {
       x: (col - row) * (this.tileW / 2),
@@ -205,7 +225,10 @@ export class IsoEarth {
 
   public gridToScreen(col: number, row: number): { x: number; y: number } {
     const w = this.tileWorld(col, row);
-    return { x: w.x - this.camX + this.canvas.width / 2, y: w.y - this.camY + this.canvas.height * 0.42 };
+    return {
+      x: w.x - this.camX + this.canvas.width / 2,
+      y: w.y - this.camY + this.canvas.height * 0.42
+    };
   }
 
   private syncCamera(snap: boolean) {
@@ -222,7 +245,7 @@ export class IsoEarth {
   private render() {
     const { width, height } = this.canvas;
 
-    // Soft daytime sky — cozy meadow atmosphere
+    // Soft daytime sky
     const sky = this.ctx.createLinearGradient(0, 0, 0, height);
     sky.addColorStop(0, '#9ec8e0');
     sky.addColorStop(0.28, '#c5e0b8');
@@ -231,36 +254,41 @@ export class IsoEarth {
     this.ctx.fillStyle = sky;
     this.ctx.fillRect(0, 0, width, height);
 
-    // Soft sun glow
     const sun = this.ctx.createRadialGradient(width * 0.78, height * 0.12, 10, width * 0.78, height * 0.12, 160);
     sun.addColorStop(0, 'rgba(255, 236, 170, 0.55)');
     sun.addColorStop(1, 'rgba(255, 236, 170, 0)');
     this.ctx.fillStyle = sun;
     this.ctx.fillRect(0, 0, width, height);
 
-    // Infinite meadow underlay so the map never reads as a floating island
-    this.drawMeadowUnderlay(width, height);
+    // Stream chunks sized to the viewport so no map edge appears on screen
+    const viewCols = Math.ceil(width / (this.tileW / 2)) + 6;
+    const viewRows = Math.ceil(height / (this.tileH / 2)) + 8;
+    const chunkNeed = Math.ceil(Math.max(viewCols, viewRows) / 16) + 1;
+    this.world.loadRadius = chunkNeed;
+    this.world.unloadRadius = chunkNeed + 1;
+    this.world.syncAround(this.playerCol, this.playerRow);
 
-    const size = this.map.gridSize;
-    const drawOrder: Array<{ col: number; row: number }> = [];
-    for (let row = 0; row < size; row++) {
-      for (let col = 0; col < size; col++) drawOrder.push({ col, row });
+    const drawOrder: Array<{ col: number; row: number; tileId: string }> = [];
+
+    for (let row = this.playerRow - viewRows; row <= this.playerRow + viewRows; row++) {
+      for (let col = this.playerCol - viewCols; col <= this.playerCol + viewCols; col++) {
+        const tileId = this.world.getTile(col, row);
+        const { x, y } = this.gridToScreen(col, row);
+        if (x < -120 || x > width + 120 || y < -140 || y > height + 120) continue;
+        drawOrder.push({ col, row, tileId });
+      }
     }
     drawOrder.sort((a, b) => a.col + a.row - (b.col + b.row));
 
-    for (const { col, row } of drawOrder) {
-      const tileId = this.map.tiles[row][col];
+    for (const { col, row, tileId } of drawOrder) {
       const { x, y } = this.gridToScreen(col, row);
-      if (x < -100 || x > width + 100 || y < -120 || y > height + 100) continue;
-
       this.drawIsoTile(tileId, x, y, col, row);
 
       if (['tree', 'pine', 'house', 'shop', 'hub', 'lab', 'tower', 'bush', 'lamp', 'sign', 'chest'].includes(tileId)) {
         this.drawProp(tileId, x, y);
       }
 
-      // Flower speckles on grass
-      if ((tileId === 'grass' || tileId === 'park' || tileId === 'tall_grass') && (col * 7 + row * 13) % 11 === 0) {
+      if ((tileId === 'grass' || tileId === 'park' || tileId === 'tall_grass') && ((col * 7 + row * 13) % 11 + 11) % 11 === 0) {
         this.ctx.fillStyle = (col + row) % 2 === 0 ? '#f8f0f4' : '#f0a8c0';
         this.ctx.fillRect(x - 2, y - 4, 3, 3);
         this.ctx.fillRect(x + 6, y + 2, 2, 2);
@@ -285,43 +313,6 @@ export class IsoEarth {
     );
   }
 
-  private drawMeadowUnderlay(width: number, height: number) {
-    // Paint a dense field of soft grass diamonds around the camera so edges feel continuous
-    const hw = this.tileW / 2;
-    const hh = this.tileH / 2;
-    const cols = Math.ceil(width / hw) + 6;
-    const rows = Math.ceil(height / hh) + 8;
-    const originCol = Math.floor(this.playerCol);
-    const originRow = Math.floor(this.playerRow);
-
-    for (let r = -rows; r < rows; r++) {
-      for (let c = -cols; c < cols; c++) {
-        const col = originCol + c;
-        const row = originRow + r;
-        // Skip interior map cells — real tiles draw there
-        if (col >= 0 && row >= 0 && col < this.map.gridSize && row < this.map.gridSize) continue;
-
-        const { x, y } = this.gridToScreen(col, row);
-        if (x < -80 || x > width + 80 || y < -60 || y > height + 60) continue;
-
-        const shade = ((col * 3 + row * 5) & 1) === 0 ? '#8fbf6a' : '#7aaa58';
-        this.ctx.fillStyle = shade;
-        this.ctx.beginPath();
-        this.ctx.moveTo(x, y - hh);
-        this.ctx.lineTo(x + hw, y);
-        this.ctx.lineTo(x, y + hh);
-        this.ctx.lineTo(x - hw, y);
-        this.ctx.closePath();
-        this.ctx.fill();
-
-        if (((col * 7 + row * 11) % 17) === 0) {
-          this.ctx.fillStyle = '#b8d98a';
-          this.ctx.fillRect(x - 2, y - 2, 3, 3);
-        }
-      }
-    }
-  }
-
   private drawIsoTile(tileId: string, cx: number, cy: number, col: number, row: number) {
     const def = ISO_TILE_BY_ID[tileId] ?? ISO_TILE_BY_ID.grass;
     let palette = ISO_PALETTE[def.palette] ?? ISO_PALETTE.grass;
@@ -335,7 +326,6 @@ export class IsoEarth {
     const hh = this.tileH / 2;
     const depth = 12;
 
-    // Right face
     this.ctx.fillStyle = palette.right;
     this.ctx.beginPath();
     this.ctx.moveTo(cx, cy + hh);
@@ -345,7 +335,6 @@ export class IsoEarth {
     this.ctx.closePath();
     this.ctx.fill();
 
-    // Left face
     this.ctx.fillStyle = palette.left;
     this.ctx.beginPath();
     this.ctx.moveTo(cx, cy + hh);
@@ -355,7 +344,6 @@ export class IsoEarth {
     this.ctx.closePath();
     this.ctx.fill();
 
-    // Top diamond
     this.ctx.fillStyle = palette.top;
     this.ctx.beginPath();
     this.ctx.moveTo(cx, cy - hh);
@@ -365,7 +353,6 @@ export class IsoEarth {
     this.ctx.closePath();
     this.ctx.fill();
 
-    // Soft edge
     this.ctx.strokeStyle = 'rgba(60, 80, 40, 0.12)';
     this.ctx.lineWidth = 1;
     this.ctx.beginPath();
@@ -376,7 +363,6 @@ export class IsoEarth {
     this.ctx.closePath();
     this.ctx.stroke();
 
-    // Grass dither
     if (palette.accent && (tileId === 'grass' || tileId === 'park' || tileId === 'tall_grass')) {
       this.ctx.fillStyle = palette.accent;
       this.ctx.fillRect(cx - 8, cy - 2, 2, 2);
@@ -384,7 +370,6 @@ export class IsoEarth {
       this.ctx.fillRect(cx - 2, cy + 8, 2, 2);
     }
 
-    // Cobble stones
     if (tileId === 'cobble' || tileId === 'plaza') {
       this.ctx.fillStyle = 'rgba(120, 100, 70, 0.2)';
       this.ctx.fillRect(cx - 10, cy - 2, 6, 3);
@@ -395,12 +380,10 @@ export class IsoEarth {
 
   private drawProp(tileId: string, cx: number, cy: number) {
     if (tileId === 'tree' || tileId === 'pine') {
-      // Trunk
       this.ctx.fillStyle = '#6b4423';
       this.ctx.fillRect(cx - 4, cy - 18, 8, 22);
       this.ctx.fillStyle = '#8b5a2b';
       this.ctx.fillRect(cx - 3, cy - 16, 3, 18);
-      // Cloud canopy
       const canopy = tileId === 'pine' ? '#5a9a68' : '#6aaa58';
       const canopyDark = tileId === 'pine' ? '#447850' : '#4e8a3e';
       this.ctx.fillStyle = canopyDark;
@@ -438,7 +421,6 @@ export class IsoEarth {
       this.ctx.fillStyle = '#f8e090';
       this.ctx.fillRect(cx - 2, cy - 12, 4, 4);
     } else {
-      // Cozy house / shop / hub with red roof
       const h = tileId === 'tower' ? 52 : tileId === 'hub' ? 40 : 32;
       const wallL = '#c9a882';
       const wallR = '#a88860';
@@ -450,7 +432,6 @@ export class IsoEarth {
       this.ctx.fillStyle = wallR;
       this.ctx.fillRect(cx, cy - h, 18, h);
 
-      // Roof diamond
       this.ctx.fillStyle = roof;
       this.ctx.beginPath();
       this.ctx.moveTo(cx, cy - h - 16);
@@ -468,14 +449,12 @@ export class IsoEarth {
       this.ctx.closePath();
       this.ctx.fill();
 
-      // Windows
       this.ctx.fillStyle = '#7ec8d8';
       this.ctx.fillRect(cx - 12, cy - h + 10, 6, 6);
       this.ctx.fillRect(cx + 6, cy - h + 10, 6, 6);
       this.ctx.fillStyle = '#5a4838';
       this.ctx.fillRect(cx - 4, cy - 14, 8, 14);
 
-      // Chimney smoke
       if (tileId === 'house' || tileId === 'shop') {
         this.ctx.fillStyle = '#8a5040';
         this.ctx.fillRect(cx + 10, cy - h - 22, 6, 14);
@@ -505,39 +484,32 @@ export class IsoEarth {
     const bob = moving ? Math.sin(this.walkFrame * 1.2) * 2 : 0;
     const y = cy - 10 + bob;
 
-    // Soft shadow
     this.ctx.fillStyle = 'rgba(40, 50, 30, 0.28)';
     this.ellipse(cx, cy + 8, 14, 6);
 
-    // Legs
     this.ctx.fillStyle = pants;
     this.ctx.fillRect(cx - 7, y + 14, 5, 9);
     this.ctx.fillRect(cx + 2, y + 14, 5, 9);
 
-    // Cloak / body
     this.ctx.fillStyle = shirt;
     this.ctx.fillRect(cx - 9, y + 2, 18, 14);
     this.ctx.fillStyle = this.mixHex(shirt, '#000000', 0.15);
     this.ctx.fillRect(cx - 10, y + 4, 4, 12);
     this.ctx.fillRect(cx + 6, y + 4, 4, 12);
 
-    // Head
     this.ctx.fillStyle = skin;
     this.ctx.fillRect(cx - 7, y - 10, 14, 13);
 
-    // Wide-brim hat (cozy witch/adventurer look)
     this.ctx.fillStyle = hair;
     this.ctx.fillRect(cx - 11, y - 12, 22, 5);
     this.ctx.fillRect(cx - 6, y - 20, 12, 10);
     this.ctx.fillStyle = '#4a90c8';
     this.ctx.fillRect(cx - 6, y - 12, 12, 2);
 
-    // Eyes
     this.ctx.fillStyle = '#2c1810';
     this.ctx.fillRect(cx - 4, y - 5, 2, 2);
     this.ctx.fillRect(cx + 2, y - 5, 2, 2);
 
-    // Soft nameplate
     this.ctx.fillStyle = 'rgba(60, 44, 28, 0.72)';
     this.roundRect(cx - 30, y - 34, 60, 12, 4);
     this.ctx.fillStyle = '#f5efe4';
