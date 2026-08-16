@@ -1,20 +1,22 @@
 /**
- * BPV Game — Battle Pixel V foundation shell.
- * Classic 16-bit RPG IsoEarth + Outdoor GPS + Fish Cards + Tournaments + Multiplayer.
+ * BPV Game — full-screen cozy 16-bit RPG shell.
  */
 
 import React, { useEffect, useRef, useState } from 'react';
 import { LocationService, DistrictName } from './game/LocationService';
-import { DexMenu, DexTab } from './components/DexMenu';
+import { DexTab } from './components/DexMenu';
 import { FishCardView, FishCardData } from './components/FishCardView';
 import { TournamentScreen, TournamentData } from './components/TournamentScreen';
 import { MissionsScreen, MissionData } from './components/MissionsScreen';
 import { AvatarCustomizer } from './components/AvatarCustomizer';
 import { FriendsScreen, NearbyPlayer } from './components/FriendsScreen';
-import { IsoEarthView } from './components/IsoEarthView';
+import { IsoEarthView, IsoEarthViewHandle } from './components/IsoEarthView';
+import { GameHUD } from './components/GameHUD';
+import { PauseMenu } from './components/PauseMenu';
+import { InventoryPanel } from './components/InventoryPanel';
 import { retroAudio } from './game/AudioSynth';
 import { DistrictRealm } from './game/iso/IsoTiles';
-import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react';
 
 const STARTER_CARDS: FishCardData[] = [
   {
@@ -80,10 +82,13 @@ const STARTER_CARDS: FishCardData[] = [
 ];
 
 export const App: React.FC = () => {
-  const dpadEarthRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const earthRef = useRef<IsoEarthViewHandle>(null);
   const locationServiceRef = useRef<LocationService | null>(null);
 
   const [activeTab, setActiveTab] = useState<DexTab>('PLAY');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [inventoryOpen, setInventoryOpen] = useState(false);
+  const [realm, setRealm] = useState<DistrictRealm>('city_center');
   const [isOutdoorMode, setIsOutdoorMode] = useState(false);
   const [currentDistrict, setCurrentDistrict] = useState<DistrictName | string>('City Center');
   const [totalMeters, setTotalMeters] = useState(120);
@@ -94,14 +99,13 @@ export const App: React.FC = () => {
     level: 3,
     xp: 450,
     coins: 650,
-    avatar_skin: '#fbcfe8',
-    avatar_hair: '#1e293b',
-    avatar_shirt: '#2563eb',
-    avatar_pants: '#1e293b'
+    avatar_skin: '#f3d5b5',
+    avatar_hair: '#3d2914',
+    avatar_shirt: '#3a5a8c',
+    avatar_pants: '#2c3e50'
   });
 
   const [cards, setCards] = useState<FishCardData[]>(STARTER_CARDS);
-
   const [tournaments, setTournaments] = useState<TournamentData[]>([
     {
       id: 1,
@@ -124,7 +128,6 @@ export const App: React.FC = () => {
       start_time: 'In 20 mins'
     }
   ]);
-
   const [missions, setMissions] = useState<MissionData[]>([
     {
       id: 1,
@@ -160,7 +163,6 @@ export const App: React.FC = () => {
       reward_coins: 300
     }
   ]);
-
   const [nearbyPlayers] = useState<NearbyPlayer[]>([
     { id: 2, username: 'PixelMaster_99', level: 5, avatar_skin: '#fed7aa', avatar_shirt: '#dc2626' },
     { id: 3, username: 'AquaRider', level: 4, avatar_skin: '#fbcfe8', avatar_shirt: '#10b981' },
@@ -181,12 +183,30 @@ export const App: React.FC = () => {
     return () => locService.stopTracking();
   }, []);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code === 'Escape') {
+        if (activeTab !== 'PLAY') {
+          setActiveTab('PLAY');
+        } else {
+          setMenuOpen(m => !m);
+          setInventoryOpen(false);
+        }
+      }
+      if (e.code === 'KeyI' || e.code === 'Tab') {
+        if (e.code === 'Tab') e.preventDefault();
+        if (activeTab === 'PLAY' && !menuOpen) setInventoryOpen(v => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [activeTab, menuOpen]);
+
   const handleUpgradeCard = (cardId: number) => {
     const card = cards.find(c => c.id === cardId);
     if (!card) return;
     const cost = card.level * 100;
     if (player.coins < cost) return;
-
     retroAudio.playItemPickup();
     setPlayer(p => ({ ...p, coins: p.coins - cost }));
     setCards(prev =>
@@ -201,7 +221,6 @@ export const App: React.FC = () => {
   const handleClaimMission = (missionId: number) => {
     const mission = missions.find(m => m.id === missionId);
     if (!mission || mission.is_completed) return;
-
     retroAudio.playQuestComplete();
     setPlayer(p => ({ ...p, coins: p.coins + mission.reward_coins, xp: p.xp + mission.reward_xp }));
     setMissions(prev => prev.map(m => (m.id === missionId ? { ...m, is_completed: true } : m)));
@@ -240,38 +259,25 @@ export const App: React.FC = () => {
       avatar_shirt: newAvatar.shirt,
       avatar_pants: newAvatar.pants
     }));
+    setActiveTab('PLAY');
   };
 
   const handleDpad = (dir: { x: number; y: number }) => {
-    dpadEarthRef.current = dir;
-    // Dispatch synthetic key events so IsoEarth picks up D-pad
-    const map: Record<string, string> = {
-      '0,-1': 'ArrowUp',
-      '0,1': 'ArrowDown',
-      '-1,0': 'ArrowLeft',
-      '1,0': 'ArrowRight'
-    };
-    const key = map[`${dir.x},${dir.y}`];
-    if (key) {
-      window.dispatchEvent(new KeyboardEvent('keydown', { code: key }));
-    } else {
-      ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].forEach(code =>
-        window.dispatchEvent(new KeyboardEvent('keyup', { code }))
-      );
-    }
+    earthRef.current?.setJoystick(dir);
   };
 
-  const onDistrictChange = (realm: DistrictRealm) => {
+  const onDistrictChange = (next: DistrictRealm) => {
+    setRealm(next);
     const labels: Record<DistrictRealm, string> = {
       city_center: 'City Center',
-      residential: 'Residential District',
+      residential: 'Residential',
       central_park: 'Central Park',
       pixel_harbor: 'Pixel Harbor',
       shopping_outpost: 'Shopping Outpost',
       tournament_arena: 'Tournament Arena',
       mixed: 'Mixed Earth'
     };
-    setCurrentDistrict(labels[realm]);
+    setCurrentDistrict(labels[next]);
   };
 
   const avatar = {
@@ -282,116 +288,130 @@ export const App: React.FC = () => {
     pants: player.avatar_pants
   };
 
+  const playing = activeTab === 'PLAY';
+
   return (
-    <div className="relative w-full h-full flex flex-col bg-slate-950 select-none overflow-hidden font-sans">
-      <DexMenu
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        player={player}
-        isOutdoorMode={isOutdoorMode}
-        currentDistrict={String(currentDistrict)}
-      />
+    <div className="game-root">
+      <IsoEarthView ref={earthRef} avatar={avatar} visible={playing} onDistrictChange={onDistrictChange} />
 
-      <div className="relative flex-1 w-full h-full overflow-hidden">
-        <IsoEarthView
-          avatar={avatar}
-          visible={activeTab === 'PLAY'}
-          onDistrictChange={onDistrictChange}
-        />
+      {playing && (
+        <>
+          <GameHUD
+            player={player}
+            district={String(currentDistrict)}
+            isOutdoor={isOutdoorMode}
+            metersWalked={totalMeters}
+            onOpenMenu={() => {
+              retroAudio.playClick();
+              setMenuOpen(true);
+            }}
+            onToggleInventory={() => setInventoryOpen(v => !v)}
+          />
 
-        {activeTab === 'PLAY' && (
-          <div className="absolute bottom-8 left-8 z-30 flex flex-col items-center gap-1 opacity-80 hover:opacity-100 transition-opacity">
+          <InventoryPanel open={inventoryOpen} onClose={() => setInventoryOpen(false)} gold={player.coins} />
+
+          <PauseMenu
+            open={menuOpen}
+            onClose={() => setMenuOpen(false)}
+            playerName={player.username}
+            currentRealm={realm}
+            onDistrict={r => earthRef.current?.loadDistrict(r)}
+            onNavigate={tab => {
+              setMenuOpen(false);
+              setActiveTab(tab);
+            }}
+          />
+
+          <div className="game-dpad">
             <button
+              type="button"
               onMouseDown={() => handleDpad({ x: 0, y: -1 })}
               onMouseUp={() => handleDpad({ x: 0, y: 0 })}
               onTouchStart={() => handleDpad({ x: 0, y: -1 })}
               onTouchEnd={() => handleDpad({ x: 0, y: 0 })}
-              className="p-3 rounded-xl glass-panel border border-slate-700 text-white active:bg-amber-500 active:text-slate-950 shadow-lg"
             >
-              <ChevronUp className="w-6 h-6" />
+              <ChevronUp />
             </button>
-            <div className="flex items-center gap-4">
+            <div className="game-dpad-mid">
               <button
+                type="button"
                 onMouseDown={() => handleDpad({ x: -1, y: 0 })}
                 onMouseUp={() => handleDpad({ x: 0, y: 0 })}
                 onTouchStart={() => handleDpad({ x: -1, y: 0 })}
                 onTouchEnd={() => handleDpad({ x: 0, y: 0 })}
-                className="p-3 rounded-xl glass-panel border border-slate-700 text-white active:bg-amber-500 active:text-slate-950 shadow-lg"
               >
-                <ChevronLeft className="w-6 h-6" />
+                <ChevronLeft />
               </button>
               <button
+                type="button"
                 onMouseDown={() => handleDpad({ x: 1, y: 0 })}
                 onMouseUp={() => handleDpad({ x: 0, y: 0 })}
                 onTouchStart={() => handleDpad({ x: 1, y: 0 })}
                 onTouchEnd={() => handleDpad({ x: 0, y: 0 })}
-                className="p-3 rounded-xl glass-panel border border-slate-700 text-white active:bg-amber-500 active:text-slate-950 shadow-lg"
               >
-                <ChevronRight className="w-6 h-6" />
+                <ChevronRight />
               </button>
             </div>
             <button
+              type="button"
               onMouseDown={() => handleDpad({ x: 0, y: 1 })}
               onMouseUp={() => handleDpad({ x: 0, y: 0 })}
               onTouchStart={() => handleDpad({ x: 0, y: 1 })}
               onTouchEnd={() => handleDpad({ x: 0, y: 0 })}
-              className="p-3 rounded-xl glass-panel border border-slate-700 text-white active:bg-amber-500 active:text-slate-950 shadow-lg"
             >
-              <ChevronDown className="w-6 h-6" />
+              <ChevronDown />
             </button>
-            <p className="text-[9px] text-slate-400 font-orbitron mt-1 tracking-wider">
-              {totalMeters}m walked
-            </p>
           </div>
-        )}
+        </>
+      )}
 
-        {activeTab === 'CARDS' && (
-          <div className="w-full h-full p-6 overflow-y-auto flex flex-col gap-6">
-            <div>
-              <h2 className="text-2xl font-extrabold font-orbitron text-amber-400">
-                EMOJI DESIGN FISH CARDS
-              </h2>
-              <p className="text-xs text-slate-400 font-sans mt-0.5">
-                Collectible holographic cards framed like fishcard.svg — emoji faces, tournament loot, IsoEarth drops.
-              </p>
+      {!playing && (
+        <div className="dex-overlay">
+          <button
+            type="button"
+            className="dex-back"
+            onClick={() => {
+              retroAudio.playClick();
+              setActiveTab('PLAY');
+            }}
+          >
+            <X size={16} /> Back to World
+          </button>
+
+          {activeTab === 'CARDS' && (
+            <div className="dex-scroll">
+              <h2>Emoji Design Fish Cards</h2>
+              <p>Collectible holographic cards — tournament loot & IsoEarth drops.</p>
+              <div className="dex-cards">
+                {cards.map(c => (
+                  <FishCardView key={c.id} card={c} onUpgrade={handleUpgradeCard} playerCoins={player.coins} />
+                ))}
+              </div>
             </div>
+          )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 justify-items-center">
-              {cards.map(c => (
-                <FishCardView
-                  key={c.id}
-                  card={c}
-                  onUpgrade={handleUpgradeCard}
-                  playerCoins={player.coins}
-                />
-              ))}
-            </div>
-          </div>
-        )}
+          {activeTab === 'TOURNAMENTS' && (
+            <TournamentScreen
+              tournaments={tournaments}
+              onCreateTournament={handleCreateTournament}
+              onJoinTournament={id => alert(`Joined Tournament #${id}!`)}
+            />
+          )}
 
-        {activeTab === 'TOURNAMENTS' && (
-          <TournamentScreen
-            tournaments={tournaments}
-            onCreateTournament={handleCreateTournament}
-            onJoinTournament={id => alert(`Joined Tournament #${id}!`)}
-          />
-        )}
+          {activeTab === 'MISSIONS' && (
+            <MissionsScreen missions={missions} onClaimReward={handleClaimMission} />
+          )}
 
-        {activeTab === 'MISSIONS' && (
-          <MissionsScreen missions={missions} onClaimReward={handleClaimMission} />
-        )}
+          {activeTab === 'AVATAR' && <AvatarCustomizer avatar={avatar} onSaveAvatar={handleSaveAvatar} />}
 
-        {activeTab === 'AVATAR' && (
-          <AvatarCustomizer avatar={avatar} onSaveAvatar={handleSaveAvatar} />
-        )}
-
-        {activeTab === 'FRIENDS' && (
-          <FriendsScreen
-            nearbyPlayers={nearbyPlayers}
-            onAddFriend={username => alert(`Friend request sent to ${username}!`)}
-          />
-        )}
-      </div>
+          {activeTab === 'FRIENDS' && (
+            <FriendsScreen
+              nearbyPlayers={nearbyPlayers}
+              onAddFriend={username => alert(`Friend request sent to ${username}!`)}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 };

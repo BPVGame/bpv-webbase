@@ -1,6 +1,6 @@
 # Battle Pixel V — Web Base
 
-Foundation for **BPV Game**: a scalable online 16-bit top-down RPG where real-world exploration and online multiplayer meet collectible Fish Cards and tournaments.
+Full-screen cozy **16-bit RPG** foundation for **BPV Game**: real-world exploration, online multiplayer, tournaments, and collectible Fish Cards.
 
 ## Feel
 
@@ -16,17 +16,17 @@ Classic 16-bit RPG + Real-world exploration + Online multiplayer + Tournaments +
 
 ### Screenshots
 
-**IsoEarth — City Center**
+**Full-screen IsoEarth (City Center)**
 
 ![IsoEarth City Center](docs/media/isoearth-world.png)
 
-**IsoEarth — Pixel Harbor**
+**Central Park**
 
-![IsoEarth Pixel Harbor](docs/media/isoearth-harbor.png)
+![IsoEarth Central Park](docs/media/isoearth-park.png)
 
-**IsoEarth — Central Park (live play)**
+**Inventory bag (I / Tab)**
 
-![IsoEarth Central Park live](docs/media/isoearth-live-park.png)
+![Inventory](docs/media/inventory.png)
 
 **Emoji Design Fish Cards**
 
@@ -36,11 +36,19 @@ Classic 16-bit RPG + Real-world exploration + Online multiplayer + Tournaments +
 
 ![BPV Tournaments](docs/media/tournaments.png)
 
+### Controls
+
+| Input | Action |
+| --- | --- |
+| WASD / arrows / D-pad | Move |
+| `I` or `Tab` | Open bag |
+| `Esc` / ☰ | Pause menu (travel, Fish Cards, tournaments…) |
+
 ## Stack
 
 | Pillar | Tech |
 | --- | --- |
-| Web playable prototype | React + Canvas IsoEarth |
+| Web playable prototype | React + full-screen Canvas IsoEarth |
 | Native foundation | SpriteKit + Swift + Core Location (`ios/BPVGame`) |
 | Maps | Tiled Map Editor (`.tmj`) + IsoEarth JSON |
 | API | Express / Neon → production **bpvgame.com** |
@@ -59,13 +67,9 @@ Set `VITE_BPV_API_URL=http://localhost:3001` to point the client at the local se
 
 ### Capture README media
 
-With the dev server running:
-
 ```bash
-node scripts/capture-demo.mjs
+npm run capture:demo
 ```
-
-Writes screenshots + `docs/media/bpv-gameplay.mp4`.
 
 ## Docs
 

@@ -31,8 +31,8 @@ await page.waitForTimeout(2000);
 await page.keyboard.press('Escape').catch(() => {});
 
 // --- WORLD / IsoEarth ---
-await page.waitForSelector('text=ISO EARTH', { timeout: 15000 });
-await page.waitForTimeout(800);
+await page.waitForSelector('canvas.game-canvas, canvas', { timeout: 15000 });
+await page.waitForTimeout(1200);
 
 // Move around with WASD
 for (const key of ['KeyD', 'KeyD', 'KeyW', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyW']) {
@@ -44,19 +44,22 @@ for (const key of ['KeyD', 'KeyD', 'KeyW', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyW
 await page.waitForTimeout(400);
 await page.screenshot({ path: path.join(OUT, 'isoearth-world.png'), fullPage: false });
 
-// Switch district to Pixel Harbor
+// Open pause menu → Pixel Harbor
+await page.keyboard.press('Escape');
+await page.waitForTimeout(400);
 const harbor = page.getByRole('button', { name: /Pixel Harbor/i });
 if (await harbor.count()) {
   await harbor.click();
-  await page.waitForTimeout(900);
+  await page.waitForTimeout(1000);
   await page.screenshot({ path: path.join(OUT, 'isoearth-harbor.png'), fullPage: false });
 }
 
-// Switch to Central Park
+await page.keyboard.press('Escape');
+await page.waitForTimeout(300);
 const park = page.getByRole('button', { name: /Central Park/i });
 if (await park.count()) {
   await park.click();
-  await page.waitForTimeout(700);
+  await page.waitForTimeout(800);
 }
 for (const key of ['KeyA', 'KeyA', 'KeyS', 'KeyD']) {
   await page.keyboard.down(key);
@@ -66,20 +69,35 @@ for (const key of ['KeyA', 'KeyA', 'KeyS', 'KeyD']) {
 await page.waitForTimeout(400);
 await page.screenshot({ path: path.join(OUT, 'isoearth-park.png'), fullPage: false });
 
-// --- FISH CARDS ---
-await page.getByRole('button', { name: /FISH CARDS/i }).click();
-await page.waitForSelector('text=EMOJI DESIGN FISH CARDS', { timeout: 10000 });
+// Inventory
+await page.keyboard.press('KeyI');
+await page.waitForTimeout(500);
+await page.screenshot({ path: path.join(OUT, 'inventory.png'), fullPage: false });
+await page.keyboard.press('KeyI');
+await page.waitForTimeout(300);
+
+// --- FISH CARDS via pause menu ---
+await page.keyboard.press('Escape');
+await page.waitForTimeout(350);
+await page.getByRole('button', { name: /Fish Cards/i }).click();
+await page.waitForSelector('text=Emoji Design Fish Cards', { timeout: 10000 });
 await page.waitForTimeout(700);
 await page.screenshot({ path: path.join(OUT, 'fish-cards.png'), fullPage: false });
 
 // --- TOURNAMENTS ---
-await page.getByRole('button', { name: /TOURNAMENTS/i }).click();
+await page.getByRole('button', { name: /Back to World/i }).click();
+await page.waitForTimeout(400);
+await page.keyboard.press('Escape');
+await page.waitForTimeout(350);
+await page.getByRole('button', { name: /Tournaments/i }).click();
 await page.waitForTimeout(900);
 await page.screenshot({ path: path.join(OUT, 'tournaments.png'), fullPage: false });
 
-// Back to WORLD and move a bit more for video
-await page.getByRole('button', { name: /^WORLD$/i }).click();
-await page.waitForTimeout(600);
+// Back to world
+await page.getByRole('button', { name: /Back to World/i }).click();
+await page.waitForTimeout(500);
+await page.keyboard.press('Escape');
+await page.waitForTimeout(300);
 const city = page.getByRole('button', { name: /City Center/i });
 if (await city.count()) await city.click();
 await page.waitForTimeout(500);
