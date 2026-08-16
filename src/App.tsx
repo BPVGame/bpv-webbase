@@ -1,5 +1,9 @@
+/**
+ * BPV Game — Battle Pixel V foundation shell.
+ * Classic 16-bit RPG IsoEarth + Outdoor GPS + Fish Cards + Tournaments + Multiplayer.
+ */
+
 import React, { useEffect, useRef, useState } from 'react';
-import { PixelEngine } from './game/PixelEngine';
 import { LocationService, DistrictName } from './game/LocationService';
 import { DexMenu, DexTab } from './components/DexMenu';
 import { FishCardView, FishCardData } from './components/FishCardView';
@@ -7,21 +11,83 @@ import { TournamentScreen, TournamentData } from './components/TournamentScreen'
 import { MissionsScreen, MissionData } from './components/MissionsScreen';
 import { AvatarCustomizer } from './components/AvatarCustomizer';
 import { FriendsScreen, NearbyPlayer } from './components/FriendsScreen';
+import { IsoEarthView } from './components/IsoEarthView';
 import { retroAudio } from './game/AudioSynth';
-import { Play, Sparkles, Navigation, Layers, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { DistrictRealm } from './game/iso/IsoTiles';
+import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+
+const STARTER_CARDS: FishCardData[] = [
+  {
+    id: 101,
+    card_slug: 'neon_guppy',
+    name: 'Neon Pixel Guppy',
+    rarity: 'Common',
+    level: 2,
+    attack: 25,
+    defense: 18,
+    speed: 35,
+    description: 'A swift pixelated freshwater guppy glowing in cyan neon.',
+    emoji: '🐟'
+  },
+  {
+    id: 102,
+    card_slug: 'cyber_bass',
+    name: 'Cyber Bass',
+    rarity: 'Uncommon',
+    level: 1,
+    attack: 45,
+    defense: 38,
+    speed: 28,
+    description: 'Aggressive robotic bass with laser fins and armored scales.',
+    emoji: '🐠'
+  },
+  {
+    id: 103,
+    card_slug: 'plasma_salmon',
+    name: 'Plasma Salmon',
+    rarity: 'Rare',
+    level: 1,
+    attack: 75,
+    defense: 62,
+    speed: 55,
+    description: 'Legendary river runner glowing with plasma energy.',
+    emoji: '🐡'
+  },
+  {
+    id: 104,
+    card_slug: 'quantum_kraken',
+    name: 'Quantum Kraken',
+    rarity: 'Legendary',
+    level: 3,
+    attack: 140,
+    defense: 125,
+    speed: 95,
+    description: 'Deep sea mythic organism capable of warping space.',
+    emoji: '🐙'
+  },
+  {
+    id: 105,
+    card_slug: 'emoji_destin',
+    name: 'Emoji Destin',
+    rarity: 'Epic',
+    level: 1,
+    attack: 88,
+    defense: 70,
+    speed: 80,
+    description: 'Emoji Design Card — holographic destin fish born from IsoEarth tides.',
+    emoji: '✨'
+  }
+];
 
 export const App: React.FC = () => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const engineRef = useRef<PixelEngine | null>(null);
+  const dpadEarthRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const locationServiceRef = useRef<LocationService | null>(null);
 
-  // App State
   const [activeTab, setActiveTab] = useState<DexTab>('PLAY');
-  const [isOutdoorMode, setIsOutdoorMode] = useState<boolean>(false);
-  const [currentDistrict, setCurrentDistrict] = useState<DistrictName>('City Center');
-  const [totalMeters, setTotalMeters] = useState<number>(120);
+  const [isOutdoorMode, setIsOutdoorMode] = useState(false);
+  const [currentDistrict, setCurrentDistrict] = useState<DistrictName | string>('City Center');
+  const [totalMeters, setTotalMeters] = useState(120);
 
-  // Auth & Player Data
   const [player, setPlayer] = useState({
     id: 1,
     username: 'Trainer_Ash',
@@ -34,53 +100,7 @@ export const App: React.FC = () => {
     avatar_pants: '#1e293b'
   });
 
-  // Cards, Tournaments, Missions, Friends Data
-  const [cards, setCards] = useState<FishCardData[]>([
-    {
-      id: 101,
-      card_slug: 'neon_guppy',
-      name: 'Neon Pixel Guppy',
-      rarity: 'Common',
-      level: 2,
-      attack: 25,
-      defense: 18,
-      speed: 35,
-      description: 'A swift pixelated freshwater guppy glowing in cyan neon.'
-    },
-    {
-      id: 102,
-      card_slug: 'cyber_bass',
-      name: 'Cyber Bass',
-      rarity: 'Uncommon',
-      level: 1,
-      attack: 45,
-      defense: 38,
-      speed: 28,
-      description: 'Aggressive robotic bass with laser fins and armored scales.'
-    },
-    {
-      id: 103,
-      card_slug: 'plasma_salmon',
-      name: 'Plasma Salmon',
-      rarity: 'Rare',
-      level: 1,
-      attack: 75,
-      defense: 62,
-      speed: 55,
-      description: 'Legendary river runner glowing with plasma energy.'
-    },
-    {
-      id: 104,
-      card_slug: 'quantum_kraken',
-      name: 'Quantum Kraken',
-      rarity: 'Legendary',
-      level: 3,
-      attack: 140,
-      defense: 125,
-      speed: 95,
-      description: 'Deep sea mythic organism capable of warping space.'
-    }
-  ]);
+  const [cards, setCards] = useState<FishCardData[]>(STARTER_CARDS);
 
   const [tournaments, setTournaments] = useState<TournamentData[]>([
     {
@@ -141,58 +161,26 @@ export const App: React.FC = () => {
     }
   ]);
 
-  const [nearbyPlayers, setNearbyPlayers] = useState<NearbyPlayer[]>([
+  const [nearbyPlayers] = useState<NearbyPlayer[]>([
     { id: 2, username: 'PixelMaster_99', level: 5, avatar_skin: '#fed7aa', avatar_shirt: '#dc2626' },
     { id: 3, username: 'AquaRider', level: 4, avatar_skin: '#fbcfe8', avatar_shirt: '#10b981' },
     { id: 4, username: 'CyberFisher', level: 7, avatar_skin: '#78350f', avatar_shirt: '#7c3aed' }
   ]);
 
-  // Init Engine & Location
   useEffect(() => {
-    if (!canvasRef.current) return;
-
-    const canvas = canvasRef.current;
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight - 60; // top menu height
-
-    const engine = new PixelEngine(canvas);
-    engineRef.current = engine;
-    engine.setAvatar({
-      username: player.username,
-      skin: player.avatar_skin,
-      hair: player.avatar_hair,
-      shirt: player.avatar_shirt,
-      pants: player.avatar_pants
-    });
-    engine.start();
-
     const locService = new LocationService();
     locationServiceRef.current = locService;
-    locService.startTracking((coords, district, meters) => {
+    locService.startTracking((_coords, district, meters) => {
       setIsOutdoorMode(locService.isOutdoorMode);
       setCurrentDistrict(district);
       setTotalMeters(Math.floor(meters));
-
-      // Progress walking mission
       setMissions(prev =>
         prev.map(m => (m.mission_key === 'walk_500m' ? { ...m, progress: Math.min(m.target, Math.floor(meters)) } : m))
       );
     });
-
-    const handleResize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight - 60;
-    };
-    window.addEventListener('resize', handleResize);
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      engine.stop();
-      locService.stopTracking();
-    };
+    return () => locService.stopTracking();
   }, []);
 
-  // Card Upgrade Action
   const handleUpgradeCard = (cardId: number) => {
     const card = cards.find(c => c.id === cardId);
     if (!card) return;
@@ -210,7 +198,6 @@ export const App: React.FC = () => {
     );
   };
 
-  // Claim Mission Action
   const handleClaimMission = (missionId: number) => {
     const mission = missions.find(m => m.id === missionId);
     if (!mission || mission.is_completed) return;
@@ -220,57 +207,98 @@ export const App: React.FC = () => {
     setMissions(prev => prev.map(m => (m.id === missionId ? { ...m, is_completed: true } : m)));
   };
 
-  // Create Tournament Action
   const handleCreateTournament = (name: string, description: string, maxPlayers: number, prize: string) => {
     retroAudio.playClick();
-    const newT: TournamentData = {
-      id: Date.now(),
-      name,
-      description,
-      max_players: maxPlayers,
-      current_players: 1,
-      status: 'open',
-      prize_description: prize,
-      start_time: 'Starting Soon'
-    };
-    setTournaments([newT, ...tournaments]);
+    setTournaments([
+      {
+        id: Date.now(),
+        name,
+        description,
+        max_players: maxPlayers,
+        current_players: 1,
+        status: 'open',
+        prize_description: prize,
+        start_time: 'Starting Soon'
+      },
+      ...tournaments
+    ]);
   };
 
-  const handleSaveAvatar = (newAvatar: any) => {
+  const handleSaveAvatar = (newAvatar: {
+    username: string;
+    skin: string;
+    hair: string;
+    shirt: string;
+    pants: string;
+  }) => {
     retroAudio.playItemPickup();
-    setPlayer(p => ({ ...p, ...newAvatar }));
-    if (engineRef.current) {
-      engineRef.current.setAvatar(newAvatar);
+    setPlayer(p => ({
+      ...p,
+      username: newAvatar.username,
+      avatar_skin: newAvatar.skin,
+      avatar_hair: newAvatar.hair,
+      avatar_shirt: newAvatar.shirt,
+      avatar_pants: newAvatar.pants
+    }));
+  };
+
+  const handleDpad = (dir: { x: number; y: number }) => {
+    dpadEarthRef.current = dir;
+    // Dispatch synthetic key events so IsoEarth picks up D-pad
+    const map: Record<string, string> = {
+      '0,-1': 'ArrowUp',
+      '0,1': 'ArrowDown',
+      '-1,0': 'ArrowLeft',
+      '1,0': 'ArrowRight'
+    };
+    const key = map[`${dir.x},${dir.y}`];
+    if (key) {
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: key }));
+    } else {
+      ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].forEach(code =>
+        window.dispatchEvent(new KeyboardEvent('keyup', { code }))
+      );
     }
   };
 
-  // Virtual Joystick D-Pad Handler for Indoor / Touch Controls
-  const handleDpad = (dir: { x: number; y: number }) => {
-    if (engineRef.current) {
-      engineRef.current.joystickDir = dir;
-    }
+  const onDistrictChange = (realm: DistrictRealm) => {
+    const labels: Record<DistrictRealm, string> = {
+      city_center: 'City Center',
+      residential: 'Residential District',
+      central_park: 'Central Park',
+      pixel_harbor: 'Pixel Harbor',
+      shopping_outpost: 'Shopping Outpost',
+      tournament_arena: 'Tournament Arena',
+      mixed: 'Mixed Earth'
+    };
+    setCurrentDistrict(labels[realm]);
+  };
+
+  const avatar = {
+    username: player.username,
+    skin: player.avatar_skin,
+    hair: player.avatar_hair,
+    shirt: player.avatar_shirt,
+    pants: player.avatar_pants
   };
 
   return (
     <div className="relative w-full h-full flex flex-col bg-slate-950 select-none overflow-hidden font-sans">
-      {/* Top Dex Bar */}
       <DexMenu
         activeTab={activeTab}
         onTabChange={setActiveTab}
         player={player}
         isOutdoorMode={isOutdoorMode}
-        currentDistrict={currentDistrict}
+        currentDistrict={String(currentDistrict)}
       />
 
-      {/* Main Content Viewport */}
       <div className="relative flex-1 w-full h-full overflow-hidden">
-        {/* 1. Canvas 2D World (Visible when PLAY tab active) */}
-        <canvas
-          ref={canvasRef}
-          className={`absolute inset-0 w-full h-full ${activeTab === 'PLAY' ? 'block' : 'hidden'}`}
+        <IsoEarthView
+          avatar={avatar}
+          visible={activeTab === 'PLAY'}
+          onDistrictChange={onDistrictChange}
         />
 
-        {/* Indoor Virtual Joystick Overlay (For Touch / Mouse D-Pad) */}
         {activeTab === 'PLAY' && (
           <div className="absolute bottom-8 left-8 z-30 flex flex-col items-center gap-1 opacity-80 hover:opacity-100 transition-opacity">
             <button
@@ -311,34 +339,24 @@ export const App: React.FC = () => {
             >
               <ChevronDown className="w-6 h-6" />
             </button>
-          </div>
-        )}
-
-        {/* NPC Dialogue Box Overlay */}
-        {activeTab === 'PLAY' && engineRef.current?.activeDialogue && (
-          <div className="absolute bottom-8 right-8 left-48 z-40 p-4 rounded-2xl glass-panel-accent border border-amber-500/50 text-white font-orbitron shadow-2xl animate-fade-in">
-            <p className="text-sm font-semibold text-amber-300">
-              {engineRef.current.activeDialogue}
+            <p className="text-[9px] text-slate-400 font-orbitron mt-1 tracking-wider">
+              {totalMeters}m walked
             </p>
-            <span className="text-[10px] text-slate-400 mt-2 block">
-              Press [E] or Space to close.
-            </span>
           </div>
         )}
 
-        {/* 2. FISH CARDS COLLECTION View */}
         {activeTab === 'CARDS' && (
           <div className="w-full h-full p-6 overflow-y-auto flex flex-col gap-6">
             <div>
               <h2 className="text-2xl font-extrabold font-orbitron text-amber-400">
-                FISH CARDS COLLECTION
+                EMOJI DESIGN FISH CARDS
               </h2>
               <p className="text-xs text-slate-400 font-sans mt-0.5">
-                Collect, upgrade, and deck-build rare Fish Cards earned from tournaments and exploration.
+                Collectible holographic cards framed like fishcard.svg — emoji faces, tournament loot, IsoEarth drops.
               </p>
             </div>
 
-            <div className="grid grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 justify-items-center">
               {cards.map(c => (
                 <FishCardView
                   key={c.id}
@@ -351,7 +369,6 @@ export const App: React.FC = () => {
           </div>
         )}
 
-        {/* 3. TOURNAMENTS View */}
         {activeTab === 'TOURNAMENTS' && (
           <TournamentScreen
             tournaments={tournaments}
@@ -360,26 +377,14 @@ export const App: React.FC = () => {
           />
         )}
 
-        {/* 4. MISSIONS View */}
         {activeTab === 'MISSIONS' && (
           <MissionsScreen missions={missions} onClaimReward={handleClaimMission} />
         )}
 
-        {/* 5. AVATAR Customizer View */}
         {activeTab === 'AVATAR' && (
-          <AvatarCustomizer
-            avatar={{
-              username: player.username,
-              skin: player.avatar_skin,
-              hair: player.avatar_hair,
-              shirt: player.avatar_shirt,
-              pants: player.avatar_pants
-            }}
-            onSaveAvatar={handleSaveAvatar}
-          />
+          <AvatarCustomizer avatar={avatar} onSaveAvatar={handleSaveAvatar} />
         )}
 
-        {/* 6. FRIENDS View */}
         {activeTab === 'FRIENDS' && (
           <FriendsScreen
             nearbyPlayers={nearbyPlayers}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, Zap, Flame, Award, ChevronUp } from 'lucide-react';
+import { Shield, Zap, Flame, ChevronUp } from 'lucide-react';
 
 export interface FishCardData {
   id: number;
@@ -11,6 +11,8 @@ export interface FishCardData {
   defense: number;
   speed: number;
   description: string;
+  /** Emoji Design Card face — pixel-era emoji used as the collectible art */
+  emoji?: string;
 }
 
 interface FishCardViewProps {
@@ -19,120 +21,149 @@ interface FishCardViewProps {
   playerCoins?: number;
 }
 
-export const FishCardView: React.FC<FishCardViewProps> = ({ card, onUpgrade, playerCoins = 0 }) => {
-  const getRarityColors = (rarity: string) => {
-    switch (rarity) {
-      case 'Mythic':
-        return { border: '#ec4899', bg: 'from-pink-950 via-slate-900 to-purple-950', text: 'text-pink-400', badge: 'bg-pink-600' };
-      case 'Legendary':
-        return { border: '#f59e0b', bg: 'from-amber-950 via-slate-900 to-yellow-950', text: 'text-amber-400', badge: 'bg-amber-500' };
-      case 'Epic':
-        return { border: '#a855f7', bg: 'from-purple-950 via-slate-900 to-indigo-950', text: 'text-purple-400', badge: 'bg-purple-600' };
-      case 'Rare':
-        return { border: '#3b82f6', bg: 'from-blue-950 via-slate-900 to-cyan-950', text: 'text-blue-400', badge: 'bg-blue-600' };
-      case 'Uncommon':
-        return { border: '#10b981', bg: 'from-emerald-950 via-slate-900 to-teal-950', text: 'text-emerald-400', badge: 'bg-emerald-600' };
-      default:
-        return { border: '#94a3b8', bg: 'from-slate-900 via-slate-900 to-slate-950', text: 'text-slate-400', badge: 'bg-slate-600' };
-    }
-  };
+const RARITY_EMOJI: Record<string, string> = {
+  Common: '🐟',
+  Uncommon: '🐠',
+  Rare: '🐡',
+  Epic: '🦈',
+  Legendary: '🐙',
+  Mythic: '🐉'
+};
 
-  const colors = getRarityColors(card.rarity);
+const RARITY_STYLE: Record<
+  string,
+  { border: string; glow: string; badge: string; foil: string; ink: string }
+> = {
+  Mythic: {
+    border: '#ec4899',
+    glow: 'rgba(236,72,153,0.45)',
+    badge: '#db2777',
+    foil: 'linear-gradient(135deg,#ec4899,#a855f7,#38bdf8)',
+    ink: '#f9a8d4'
+  },
+  Legendary: {
+    border: '#f59e0b',
+    glow: 'rgba(245,158,11,0.45)',
+    badge: '#d97706',
+    foil: 'linear-gradient(135deg,#fbbf24,#f59e0b,#fde68a)',
+    ink: '#fcd34d'
+  },
+  Epic: {
+    border: '#a855f7',
+    glow: 'rgba(168,85,247,0.4)',
+    badge: '#7c3aed',
+    foil: 'linear-gradient(135deg,#c084fc,#7c3aed,#38bdf8)',
+    ink: '#d8b4fe'
+  },
+  Rare: {
+    border: '#3b82f6',
+    glow: 'rgba(59,130,246,0.4)',
+    badge: '#2563eb',
+    foil: 'linear-gradient(135deg,#38bdf8,#2563eb,#00CBFF)',
+    ink: '#93c5fd'
+  },
+  Uncommon: {
+    border: '#10b981',
+    glow: 'rgba(16,185,129,0.35)',
+    badge: '#059669',
+    foil: 'linear-gradient(135deg,#34d399,#059669)',
+    ink: '#6ee7b7'
+  },
+  Common: {
+    border: '#94a3b8',
+    glow: 'rgba(148,163,184,0.25)',
+    badge: '#475569',
+    foil: 'linear-gradient(135deg,#64748b,#334155)',
+    ink: '#cbd5e1'
+  }
+};
+
+/**
+ * Emoji Design Fish Card — framed like fishcard.svg (cyan/indigo holographic panels)
+ * with an emoji face as the collectible artwork.
+ */
+export const FishCardView: React.FC<FishCardViewProps> = ({ card, onUpgrade, playerCoins = 0 }) => {
+  const style = RARITY_STYLE[card.rarity] || RARITY_STYLE.Common;
+  const emoji = card.emoji || RARITY_EMOJI[card.rarity] || '🐟';
   const upgradeCost = card.level * 100;
   const canUpgrade = playerCoins >= upgradeCost;
+  const showFoil = ['Rare', 'Epic', 'Legendary', 'Mythic'].includes(card.rarity);
 
   return (
-    <div
-      className={`relative flex flex-col justify-between w-64 h-96 p-4 rounded-3xl bg-gradient-to-b ${colors.bg} border-2 shadow-2xl transition-all duration-300 hover:scale-105 hover:shadow-[0_0_30px_rgba(59,130,246,0.3)] font-orbitron select-none`}
-      style={{ borderColor: colors.border }}
+    <article
+      className="emoji-design-card"
+      style={
+        {
+          '--card-border': style.border,
+          '--card-glow': style.glow,
+          '--card-badge': style.badge,
+          '--card-foil': style.foil,
+          '--card-ink': style.ink
+        } as React.CSSProperties
+      }
     >
-      {/* Holographic foil overlay for Rare+ */}
-      {['Rare', 'Epic', 'Legendary', 'Mythic'].includes(card.rarity) && (
-        <div className="absolute inset-0 rounded-3xl opacity-20 bg-gradient-to-tr from-transparent via-white to-transparent pointer-events-none animate-pulse"></div>
-      )}
+      {/* fishcard.svg inspired holographic frame layers */}
+      <div className="edc-panel edc-panel-a" aria-hidden />
+      <div className="edc-panel edc-panel-b" aria-hidden />
+      <div className="edc-panel edc-panel-c" aria-hidden />
+      {showFoil && <div className="edc-foil" aria-hidden />}
 
-      {/* Top Card Header */}
-      <div className="flex items-center justify-between z-10">
+      <header className="edc-header">
         <div>
-          <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full text-white ${colors.badge} tracking-wider`}>
-            {card.rarity.toUpperCase()}
-          </span>
-          <h3 className="text-base font-extrabold text-white mt-1 tracking-wide">{card.name}</h3>
+          <span className="edc-rarity">{card.rarity.toUpperCase()}</span>
+          <h3 className="edc-title">{card.name}</h3>
         </div>
-
-        <div className="flex flex-col items-end">
-          <span className="text-[10px] text-slate-400 font-semibold">LEVEL</span>
-          <span className="text-lg font-black text-amber-400">LVL {card.level}</span>
+        <div className="edc-level">
+          <span>LEVEL</span>
+          <strong>LVL {card.level}</strong>
         </div>
-      </div>
+      </header>
 
-      {/* SVG Fish Artwork Frame (16-Bit Pixel Fish SVG) */}
-      <div className="relative flex items-center justify-center w-full h-36 my-2 rounded-2xl bg-slate-950/80 border border-slate-800 overflow-hidden shadow-inner">
-        <svg viewBox="0 0 100 100" className="w-24 h-24 drop-shadow-[0_0_12px_rgba(59,130,246,0.5)]">
-          {/* Fish Tail */}
-          <polygon points="15,50 35,35 35,65" fill={colors.border} />
-          {/* Fish Body */}
-          <ellipse cx="60" cy="50" rx="30" ry="20" fill={colors.border} />
-          {/* Stripes */}
-          <path d="M 50 32 Q 55 50 50 68" stroke="#ffffff" strokeWidth="3" fill="none" opacity="0.7" />
-          <path d="M 65 30 Q 70 50 65 70" stroke="#ffffff" strokeWidth="3" fill="none" opacity="0.7" />
-          {/* Eye */}
-          <circle cx="78" cy="45" r="4" fill="#ffffff" />
-          <circle cx="79" cy="45" r="2" fill="#000000" />
-          {/* Fins */}
-          <polygon points="55,30 65,15 75,30" fill={colors.border} />
+      <div className="edc-art">
+        <div className="edc-emoji" role="img" aria-label={card.name}>
+          {emoji}
+        </div>
+        {/* Pixel fish silhouette from fishcard.svg geometry (simplified) */}
+        <svg className="edc-pixel-fish" viewBox="0 0 169 132" aria-hidden>
+          <polygon
+            fill="#00229D"
+            opacity="0.35"
+            points="169 58.7 169 36.7 158 36.7 158 25.7 132 25.7 132 36.7 121 36.7 121 22 110 22 110 11 95.5 11 95.5 0 36.7 0 36.7 11 22 11 22 22 11 22 11 36.7 0 36.7 0 95.3 11 95.3 11 110 22 110 22 121 36.7 121 36.7 132 95.5 132 95.5 121 110 121 110 110 121 110 121 95.3 132 95.3 132 106.3 158 106.3 158 95.3 169 95.3 169 73.3 158 73.3 158 58.7"
+          />
         </svg>
-
-        <span className="absolute bottom-2 right-2 text-[10px] text-slate-500 font-sans">
-          #BPV-{card.id.toString().padStart(4, '0')}
-        </span>
+        <span className="edc-serial">#BPV-{card.id.toString().padStart(4, '0')}</span>
       </div>
 
-      {/* Stats Badges (Attack, Defense, Speed) */}
-      <div className="grid grid-cols-3 gap-2 text-center text-xs z-10">
-        <div className="p-2 rounded-xl bg-slate-900/80 border border-slate-800">
-          <div className="flex items-center justify-center gap-1 text-red-400 font-bold text-[10px]">
-            <Flame className="w-3 h-3" /> ATK
-          </div>
-          <div className="text-sm font-extrabold text-white mt-0.5">{card.attack}</div>
+      <div className="edc-stats">
+        <div>
+          <span>
+            <Flame size={12} /> ATK
+          </span>
+          <strong>{card.attack}</strong>
         </div>
-
-        <div className="p-2 rounded-xl bg-slate-900/80 border border-slate-800">
-          <div className="flex items-center justify-center gap-1 text-blue-400 font-bold text-[10px]">
-            <Shield className="w-3 h-3" /> DEF
-          </div>
-          <div className="text-sm font-extrabold text-white mt-0.5">{card.defense}</div>
+        <div>
+          <span>
+            <Shield size={12} /> DEF
+          </span>
+          <strong>{card.defense}</strong>
         </div>
-
-        <div className="p-2 rounded-xl bg-slate-900/80 border border-slate-800">
-          <div className="flex items-center justify-center gap-1 text-emerald-400 font-bold text-[10px]">
-            <Zap className="w-3 h-3" /> SPD
-          </div>
-          <div className="text-sm font-extrabold text-white mt-0.5">{card.speed}</div>
+        <div>
+          <span>
+            <Zap size={12} /> SPD
+          </span>
+          <strong>{card.speed}</strong>
         </div>
       </div>
 
-      {/* Description & Upgrade */}
-      <div className="mt-2 z-10 flex items-center justify-between gap-2 border-t border-slate-800/80 pt-2">
-        <p className="text-[10px] text-slate-400 font-sans line-clamp-2 leading-snug">
-          {card.description}
-        </p>
-
+      <footer className="edc-footer">
+        <p>{card.description}</p>
         {onUpgrade && (
-          <button
-            onClick={() => onUpgrade(card.id)}
-            disabled={!canUpgrade}
-            className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-[10px] font-bold transition-all ${
-              canUpgrade
-                ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md cursor-pointer'
-                : 'bg-slate-800 text-slate-500 opacity-60 cursor-not-allowed'
-            }`}
-          >
-            <ChevronUp className="w-3 h-3" />
-            <span>{upgradeCost}g</span>
+          <button type="button" disabled={!canUpgrade} onClick={() => onUpgrade(card.id)}>
+            <ChevronUp size={12} />
+            {upgradeCost}g
           </button>
         )}
-      </div>
-    </div>
+      </footer>
+    </article>
   );
 };

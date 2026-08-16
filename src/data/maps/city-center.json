@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "bpv-city-center",
+  "name": "City Center Earth",
+  "description": "Starter IsoEarth for BPV City Center — tournament hub, fish lab, and cobble plaza.",
+  "location": "city_center",
+  "gridSize": 12,
+  "spawn": { "col": 6, "row": 6 },
+  "tags": ["bpv", "isoearth", "starter"],
+  "tiles": [
+    ["tall_grass", "tall_grass", "tree", "grass", "grass", "cobble", "cobble", "grass", "grass", "tree", "tall_grass", "tall_grass"],
+    ["tall_grass", "grass", "grass", "lamp", "plaza", "cobble", "cobble", "plaza", "lamp", "grass", "grass", "tall_grass"],
+    ["tree", "grass", "house", "plaza", "plaza", "cobble", "cobble", "plaza", "plaza", "shop", "grass", "tree"],
+    ["grass", "lamp", "plaza", "plaza", "plaza", "cobble", "cobble", "plaza", "plaza", "plaza", "lamp", "grass"],
+    ["grass", "plaza", "plaza", "water", "bridge", "cobble", "cobble", "bridge", "water", "plaza", "plaza", "grass"],
+    ["cobble", "cobble", "cobble", "cobble", "cobble", "cobble", "cobble", "cobble", "cobble", "cobble", "cobble", "cobble"],
+    ["cobble", "cobble", "cobble", "cobble", "cobble", "cobble", "spawn", "cobble", "cobble", "cobble", "cobble", "cobble"],
+    ["grass", "plaza", "plaza", "water", "bridge", "cobble", "cobble", "bridge", "water", "plaza", "plaza", "grass"],
+    ["grass", "lamp", "plaza", "plaza", "plaza", "cobble", "cobble", "plaza", "plaza", "plaza", "lamp", "grass"],
+    ["tree", "grass", "lab", "plaza", "plaza", "cobble", "cobble", "plaza", "plaza", "hub", "grass", "tree"],
+    ["tall_grass", "grass", "grass", "lamp", "plaza", "cobble", "cobble", "plaza", "lamp", "grass", "grass", "tall_grass"],
+    ["tall_grass", "tall_grass", "tree", "grass", "grass", "cobble", "cobble", "grass", "grass", "tree", "tall_grass", "tall_grass"]
+  ]
+}
