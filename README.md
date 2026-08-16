@@ -6,6 +6,36 @@ Foundation for **BPV Game**: a scalable online 16-bit top-down RPG where real-wo
 
 Classic 16-bit RPG + Real-world exploration + Online multiplayer + Tournaments + Collectible Fish Cards
 
+## Gameplay preview
+
+<video src="docs/media/bpv-gameplay.mp4" controls width="100%" poster="docs/media/isoearth-world.png">
+  Your browser does not support the video tag. <a href="docs/media/bpv-gameplay.mp4">Download the playthrough</a>.
+</video>
+
+[Download playthrough video (MP4)](docs/media/bpv-gameplay.mp4)
+
+### Screenshots
+
+**IsoEarth — City Center**
+
+![IsoEarth City Center](docs/media/isoearth-world.png)
+
+**IsoEarth — Pixel Harbor**
+
+![IsoEarth Pixel Harbor](docs/media/isoearth-harbor.png)
+
+**IsoEarth — Central Park (live play)**
+
+![IsoEarth Central Park live](docs/media/isoearth-live-park.png)
+
+**Emoji Design Fish Cards**
+
+![Emoji Design Fish Cards](docs/media/fish-cards.png)
+
+**Tournaments**
+
+![BPV Tournaments](docs/media/tournaments.png)
+
 ## Stack
 
 | Pillar | Tech |
@@ -26,6 +56,16 @@ npm run server       # local API → http://localhost:3001
 ```
 
 Set `VITE_BPV_API_URL=http://localhost:3001` to point the client at the local server.
+
+### Capture README media
+
+With the dev server running:
+
+```bash
+node scripts/capture-demo.mjs
+```
+
+Writes screenshots + `docs/media/bpv-gameplay.mp4`.
 
 ## Docs
 
