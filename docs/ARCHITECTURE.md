@@ -14,24 +14,35 @@
 | Location | Geolocation API `LocationService` | Core Location `LocationManager` |
 | Backend | Express + Neon Postgres | same **bpvgame.com** API |
 
-## IsoEarth
+## IsoEarth (infinite)
 
-Inspired by isometric world-builders such as [isomiddleearth](https://github.com/hasanharman/isomiddleearth):
+Chunk-based open world — no finite square boundary:
 
-- District **realms** (City Center, Pixel Harbor, Central Park, …)
-- Grouped tile catalog (Terrain, Water, Trees, Buildings, Decorations)
-- JSON map schema + **Tiled Map Editor** export/import (`.tmj`)
-- Procedural 16-bit isometric diamonds (shared tile IDs with iOS)
+- `WorldGen.ts` — designed procedural terrain from world `(x, y)`: biome regions, large forests, winding rivers, connected roads, villages & wilderness POIs
+- `ChunkWorld.ts` — load/unload `16×16` chunks around the player
+- All features are continuous across chunk borders (pure functions of world coords)
+- District travel warps to distant origins on the same infinite plane
 
 Key files:
 
-- `src/game/iso/IsoEarth.ts` — isometric engine
+- `src/game/iso/IsoEarth.ts` — isometric engine + camera follow
+- `src/game/iso/WorldGen.ts` — infinite designed terrain
+- `src/game/iso/ChunkWorld.ts` — chunk streaming
 - `src/game/iso/IsoTiles.ts` — tile catalog
-- `src/game/iso/IsoMapData.ts` — map format + generators
-- `src/game/iso/TiledMapLoader.ts` — Tiled bridge
+- `src/game/iso/TiledMapLoader.ts` — Tiled bridge (authored pockets / POIs)
 - `maps/city-center.tmj` — sample Tiled map
 
-## Emoji Design Fish Cards
+## Living AI NPCs
+
+Neuriy ChatBase + ElloFive power NPC cognition; the IsoEarth engine stays authoritative.
+
+- Client: `src/game/npc/` (`NpcDirector`, memory, relationships, LOD simulation, tool registry)
+- Server: `server/npc/` (`POST /api/npc/ai` ElloFive proxy, optional state sync)
+- UI: talk with **E**, debug with **F3** (`NpcDialogueOverlay`, `NpcDebugPanel`)
+- Docs: `docs/LIVING_NPCS.md`
+
+NPCs use world coordinates, continue under chunk unload via abstract simulation, and fall back to deterministic behavior if AI is offline.
+
 
 Collectible cards framed like `fishcard.svg` (cyan/indigo holographic panels) with emoji faces as artwork.
 

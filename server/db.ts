@@ -93,6 +93,15 @@ export async function initDatabase() {
       );
     `);
 
+    // 6. Living NPC world snapshots (ChatBase/ElloFive-backed agents)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS npc_world_state (
+        user_key VARCHAR(64) PRIMARY KEY,
+        state_json JSONB NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
     console.log('Database tables successfully migrated!');
   } catch (err) {
     console.error('Error initializing database:', err);
