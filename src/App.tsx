@@ -34,7 +34,9 @@ import { ConnectionLost } from './components/menu/ConnectionLost';
 import { SettingsPopup } from './components/settings/SettingsPopup';
 import { ServerAdminPopup } from './components/admin/ServerAdminPopup';
 import { SocialPopup } from './components/social/SocialPopup';
+import { GovernmentPanel } from './components/sandbox/GovernmentPanel';
 import { bpvApi } from './api/BpvApiClient';
+import { sandboxVm, LandTileId } from './game/sandbox';
 
 const STARTER_CARDS: FishCardData[] = [
   {
@@ -192,26 +194,38 @@ export const App: React.FC = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const [socialKind, setSocialKind] = useState<'friends' | 'party' | 'guild' | null>(null);
+  const [govOpen, setGovOpen] = useState(false);
+  const [landBrush, setLandBrush] = useState<LandTileId>('plaza');
+  const [civicPose, setCivicPose] = useState({ col: 0, row: 0 });
   const gate = gameGate.snapshot();
 
   useEffect(() => {
     const unsub = gameGate.subscribe(() => setGateTick(n => n + 1));
     gameGate.boot();
-    retroAudio.startMenuTheme();
+    sandboxVm.boot();
     return () => {
       unsub();
-      retroAudio.stopMenuTheme();
+      retroAudio.stopMusic();
     };
   }, []);
 
   useEffect(() => {
-    retroAudio.setMuted(gate.settings.mute);
-  }, [gate.settings.mute]);
+    retroAudio.setVolumes({
+      master: gate.settings.masterVolume,
+      music: gate.settings.musicVolume,
+      sfx: gate.settings.sfxVolume,
+      mute: gate.settings.mute
+    });
+  }, [gate.settings.masterVolume, gate.settings.musicVolume, gate.settings.sfxVolume, gate.settings.mute]);
 
   useEffect(() => {
-    if (gate.phase === 'main_menu') retroAudio.startMenuTheme();
-    else retroAudio.stopMenuTheme();
-  }, [gate.phase]);
+    if (gate.settings.mute) {
+      retroAudio.stopMusic();
+      return;
+    }
+    if (gate.phase === 'playing') retroAudio.startWorldTheme();
+    else retroAudio.startMenuTheme();
+  }, [gate.phase, gate.settings.mute]);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -284,10 +298,14 @@ export const App: React.FC = () => {
       const r: any = await onlineGate.action('spend_coins', { amount: cost });
       if (!r.ok || !r.session) return;
       gameGate.patchCharacter({ coins: r.session.coins });
-    } else {
+    } else if (gate.mode === 'offline') {
       const coins = livePlayer.coins;
       if (coins < cost) return;
       gameGate.persistOffline({ coins: coins - cost });
+    } else {
+      const coins = livePlayer.coins;
+      if (coins < cost) return;
+      setPlayer(p => ({ ...p, coins: coins - cost }));
     }
     retroAudio.playItemPickup();
     setCards(prev =>
@@ -306,11 +324,17 @@ export const App: React.FC = () => {
       const r: any = await onlineGate.action('complete_quest', { questId: mission.mission_key });
       if (!r.ok || !r.session) return;
       gameGate.patchCharacter({ coins: r.session.coins, xp: r.session.xp, level: r.session.level });
-    } else {
+    } else if (gate.mode === 'offline') {
       gameGate.persistOffline({
         coins: livePlayer.coins + mission.reward_coins,
         xp: livePlayer.xp + mission.reward_xp
       });
+    } else {
+      setPlayer(p => ({
+        ...p,
+        coins: p.coins + mission.reward_coins,
+        xp: p.xp + mission.reward_xp
+      }));
     }
     retroAudio.playQuestComplete();
     setMissions(prev => prev.map(m => (m.id === missionId ? { ...m, is_completed: true } : m)));
@@ -373,14 +397,34 @@ export const App: React.FC = () => {
   const playingWorld = gate.phase === 'playing' && activeTab === 'PLAY';
   const inShell = gate.phase !== 'exited';
   const netMode = playingWorld ? (gate.mode === 'online' ? 'online' : 'offline') : 'preview';
+  const sandboxPlay = gate.mode === 'sandbox';
 
   const livePlayer = {
     ...player,
     username:
-      gate.mode === 'online' ? gate.character?.username ?? player.username : gate.offlineProfile?.username ?? player.username,
-    coins: gate.mode === 'online' ? gate.character?.coins ?? player.coins : gate.offlineProfile?.coins ?? player.coins,
-    level: gate.mode === 'online' ? gate.character?.level ?? player.level : gate.offlineProfile?.level ?? player.level,
-    xp: gate.mode === 'online' ? gate.character?.xp ?? player.xp : gate.offlineProfile?.xp ?? player.xp,
+      gate.mode === 'online'
+        ? gate.character?.username ?? player.username
+        : gate.mode === 'offline'
+          ? gate.offlineProfile?.username ?? player.username
+          : player.username,
+    coins:
+      gate.mode === 'online'
+        ? gate.character?.coins ?? player.coins
+        : gate.mode === 'offline'
+          ? gate.offlineProfile?.coins ?? player.coins
+          : player.coins,
+    level:
+      gate.mode === 'online'
+        ? gate.character?.level ?? player.level
+        : gate.mode === 'offline'
+          ? gate.offlineProfile?.level ?? player.level
+          : player.level,
+    xp:
+      gate.mode === 'online'
+        ? gate.character?.xp ?? player.xp
+        : gate.mode === 'offline'
+          ? gate.offlineProfile?.xp ?? player.xp
+          : player.xp,
     avatar_skin: gate.character?.avatar_skin ?? gate.offlineProfile?.avatar_skin ?? player.avatar_skin,
     avatar_hair: gate.character?.avatar_hair ?? gate.offlineProfile?.avatar_hair ?? player.avatar_hair,
     avatar_shirt: gate.character?.avatar_shirt ?? gate.offlineProfile?.avatar_shirt ?? player.avatar_shirt,
@@ -455,7 +499,66 @@ export const App: React.FC = () => {
     if (gate.phase === 'playing') reconnectAttempt.current = 0;
   }, [gate.phase]);
 
+  useEffect(() => {
+    if (gate.phase === 'playing' && gate.mode === 'sandbox' && !sandboxVm.snap.government.founded) {
+      const p = earthRef.current?.getPose();
+      if (p) setCivicPose(p);
+      setGovOpen(true);
+    }
+    if (gate.phase !== 'playing') setGovOpen(false);
+  }, [gate.phase, gate.mode]);
+
+  useEffect(() => {
+    if (!govOpen) return;
+    const id = setInterval(() => {
+      const p = earthRef.current?.getPose();
+      if (p) setCivicPose(p);
+    }, 250);
+    return () => clearInterval(id);
+  }, [govOpen]);
+
+  useEffect(() => {
+    if (!playingWorld || gate.mode !== 'sandbox') return;
+    const id = setInterval(() => {
+      const pose = earthRef.current?.getPose() ?? { col: 0, row: 0 };
+      const r = sandboxVm.tickAi(pose);
+      if (r.acted) earthRef.current?.syncSandbox();
+    }, 4200);
+    return () => clearInterval(id);
+  }, [playingWorld, gate.mode]);
+
   const playing = playingWorld;
+
+  const claimAt = (col: number, row: number) => {
+    if (!sandboxVm.snap.government.founded) {
+      setCivicPose({ col, row });
+      setGovOpen(true);
+      return;
+    }
+    const r = sandboxVm.claimLand({ col, row, radius: 1, tileId: landBrush, role: 'governor' });
+    if (r.ok) {
+      retroAudio.playClaim();
+      earthRef.current?.syncSandbox();
+    }
+  };
+
+  const flagAt = (col: number, row: number) => {
+    if (!sandboxVm.snap.government.founded) {
+      setCivicPose({ col, row });
+      setGovOpen(true);
+      return;
+    }
+    const r = sandboxVm.plantFlag({
+      name: sandboxVm.snap.government.name || 'Banner',
+      col,
+      row,
+      role: 'governor'
+    });
+    if (r.ok) {
+      retroAudio.playFlag();
+      earthRef.current?.syncSandbox();
+    }
+  };
 
   return (
     <div className="game-root">
@@ -465,7 +568,15 @@ export const App: React.FC = () => {
           avatar={avatar}
           visible
           netMode={netMode}
-          interactive={playingWorld}
+          interactive={playingWorld && !menuOpen && !govOpen && !settingsOpen}
+          sandboxMode={sandboxPlay && playingWorld}
+          onOpenGovernment={() => {
+            const p = earthRef.current?.getPose();
+            if (p) setCivicPose(p);
+            setGovOpen(true);
+          }}
+          onClaimLand={claimAt}
+          onPlantFlag={flagAt}
           onDistrictChange={onDistrictChange}
           onNpcTalked={onNpcTalked}
         />
@@ -477,6 +588,10 @@ export const App: React.FC = () => {
           onPlay={() => gameGate.openGate()}
           onOnline={() => gameGate.chooseOnline()}
           onOffline={() => gameGate.chooseOffline()}
+          onSandbox={() => {
+            sandboxVm.boot();
+            gameGate.chooseSandbox();
+          }}
           onServers={() => gameGate.openMultiplayer()}
           onSettings={() => setSettingsOpen(true)}
           onExit={() => gameGate.exitGame()}
@@ -487,6 +602,10 @@ export const App: React.FC = () => {
         open={gate.phase === 'gate'}
         onOffline={() => gameGate.chooseOffline()}
         onOnline={() => gameGate.chooseOnline()}
+        onSandbox={() => {
+          sandboxVm.boot();
+          gameGate.chooseSandbox();
+        }}
         onServers={() => gameGate.openMultiplayer()}
         onBack={() => gameGate.boot()}
       />
@@ -646,6 +765,14 @@ export const App: React.FC = () => {
       />
       <ServerAdminPopup open={adminOpen} onClose={() => setAdminOpen(false)} />
       <SocialPopup kind={socialKind} onClose={() => setSocialKind(null)} />
+      <GovernmentPanel
+        open={govOpen && sandboxPlay}
+        founder={livePlayer.username}
+        pose={civicPose}
+        brush={landBrush}
+        onBrush={setLandBrush}
+        onClose={() => setGovOpen(false)}
+      />
 
       {gate.phase === 'exited' ? (
         <div className="main-menu">
@@ -672,6 +799,9 @@ export const App: React.FC = () => {
             }}
             onToggleInventory={() => setInventoryOpen(v => !v)}
             worldClock={worldClock}
+            sandbox={sandboxPlay}
+            muted={gate.settings.mute}
+            onToggleMute={() => gameGate.applySettings({ mute: !gate.settings.mute })}
           />
 
           <InventoryPanel open={inventoryOpen} onClose={() => setInventoryOpen(false)} gold={livePlayer.coins} />
@@ -682,6 +812,7 @@ export const App: React.FC = () => {
             playerName={livePlayer.username}
             currentRealm={realm}
             online={gate.mode === 'online'}
+            sandbox={sandboxPlay}
             canAdmin={gate.role === 'owner' || gate.role === 'admin' || gate.role === 'moderator'}
             onSettings={() => {
               setMenuOpen(false);
@@ -689,6 +820,7 @@ export const App: React.FC = () => {
             }}
             onMainMenu={() => {
               setMenuOpen(false);
+              setGovOpen(false);
               if (gate.mode === 'online') void onlineGate.leave();
               if (gate.mode === 'offline') {
                 gameGate.persistOffline({
@@ -707,6 +839,12 @@ export const App: React.FC = () => {
             onSocial={k => {
               setMenuOpen(false);
               setSocialKind(k);
+            }}
+            onGovernment={() => {
+              setMenuOpen(false);
+              const p = earthRef.current?.getPose();
+              if (p) setCivicPose(p);
+              setGovOpen(true);
             }}
             onDistrict={r => earthRef.current?.loadDistrict(r)}
             onNavigate={tab => {
@@ -753,6 +891,14 @@ export const App: React.FC = () => {
               onTouchEnd={() => handleDpad({ x: 0, y: 0 })}
             >
               <ChevronDown />
+            </button>
+            <button
+              type="button"
+              className="game-jump-btn"
+              onClick={() => earthRef.current?.tryJump()}
+              aria-label="Jump"
+            >
+              JUMP
             </button>
           </div>
         </>

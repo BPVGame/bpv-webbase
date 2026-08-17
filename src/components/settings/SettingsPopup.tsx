@@ -68,6 +68,12 @@ export const SettingsPopup: React.FC<Props> = ({
             >
               Offline
             </button>
+            <button type="button" onClick={() => {
+              if (mode === 'online') setLeaveAsk(true);
+              else onRequestMode('sandbox');
+            }}>
+              Sandbox
+            </button>
             <button type="button" onClick={() => onRequestMode('online')}>
               Online
             </button>
@@ -117,6 +123,17 @@ export const SettingsPopup: React.FC<Props> = ({
             Mute
           </label>
           <label className="gate-label">
+            Master {Math.round(settings.masterVolume * 100)}%
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={settings.masterVolume}
+              onChange={e => onChange({ masterVolume: Number(e.target.value) })}
+            />
+          </label>
+          <label className="gate-label">
             Music {Math.round(settings.musicVolume * 100)}%
             <input
               type="range"
@@ -127,11 +144,22 @@ export const SettingsPopup: React.FC<Props> = ({
               onChange={e => onChange({ musicVolume: Number(e.target.value) })}
             />
           </label>
+          <label className="gate-label">
+            SFX {Math.round(settings.sfxVolume * 100)}%
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={settings.sfxVolume}
+              onChange={e => onChange({ sfxVolume: Number(e.target.value) })}
+            />
+          </label>
         </div>
       )}
 
       {tab === 'controls' && (
-        <p className="gate-empty">WASD move · E talk · I bag · Esc pause · F3 NPC debug</p>
+        <p className="gate-empty">WASD move · J / Space jump · E talk · I bag · Esc pause · F3 NPC debug · Sandbox: C claim, F flag, G government</p>
       )}
 
       {tab === 'network' && (
@@ -157,7 +185,8 @@ export const SettingsPopup: React.FC<Props> = ({
 
       {tab === 'account' && (
         <p className="gate-empty">
-          Online characters live on the server. Offline profile stays in local save. Role: {role}.
+          Online characters live on the server. Offline profile stays in local save. Sandbox government lives in a
+          separate civic overlay. Role: {role}.
         </p>
       )}
 

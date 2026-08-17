@@ -6,11 +6,12 @@ interface Props {
   open: boolean;
   onOffline: () => void;
   onOnline: () => void;
+  onSandbox: () => void;
   onServers: () => void;
   onBack: () => void;
 }
 
-export const GateChooser: React.FC<Props> = ({ open, onOffline, onOnline, onServers, onBack }) => (
+export const GateChooser: React.FC<Props> = ({ open, onOffline, onOnline, onSandbox, onServers, onBack }) => (
   <GamePopup open={open} kicker="Game Gate" title="Choose how to enter" onClose={onBack}>
     <div className="gate-choices">
       <button type="button" onClick={onOffline}>
@@ -20,6 +21,10 @@ export const GateChooser: React.FC<Props> = ({ open, onOffline, onOnline, onServ
       <button type="button" onClick={onOnline}>
         <strong>Online</strong>
         <span>Login, then pick an official or community shard</span>
+      </button>
+      <button type="button" onClick={onSandbox}>
+        <strong>Sandbox</strong>
+        <span>Governor + AI VM · claim land, plant flags, found a state</span>
       </button>
       <button type="button" onClick={onServers}>
         <strong>Servers</strong>

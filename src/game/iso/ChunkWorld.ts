@@ -26,6 +26,8 @@ export class ChunkWorld {
   public loadRadius = 2;
   /** Unload when farther than this (chunks). */
   public unloadRadius = 3;
+  /** Civic / sandbox tiles sit on top of procedural WorldGen without mutating it. */
+  private overlays = new Map<string, string>();
 
   constructor(realm: DistrictRealm = 'city_center') {
     this.realm = realm;
@@ -33,6 +35,16 @@ export class ChunkWorld {
 
   public clear() {
     this.chunks.clear();
+  }
+
+  public setOverlay(wx: number, wy: number, tileId: string | null) {
+    const key = `${wx | 0},${wy | 0}`;
+    if (!tileId) this.overlays.delete(key);
+    else this.overlays.set(key, tileId);
+  }
+
+  public clearOverlays() {
+    this.overlays.clear();
   }
 
   public setRealm(realm: DistrictRealm) {
@@ -61,6 +73,8 @@ export class ChunkWorld {
   }
 
   public getTile(wx: number, wy: number): string {
+    const overlay = this.overlays.get(`${wx | 0},${wy | 0}`);
+    if (overlay) return overlay;
     const { cx, cy, lx, ly } = worldToChunk(wx, wy);
     const chunk = this.getOrCreateChunk(cx, cy);
     return chunk.tiles[ly][lx];
@@ -90,7 +104,9 @@ export class ChunkWorld {
     for (const chunk of this.chunks.values()) {
       for (let ly = 0; ly < CHUNK_SIZE; ly++) {
         for (let lx = 0; lx < CHUNK_SIZE; lx++) {
-          cb(chunk.cx * CHUNK_SIZE + lx, chunk.cy * CHUNK_SIZE + ly, chunk.tiles[ly][lx]);
+          const wx = chunk.cx * CHUNK_SIZE + lx;
+          const wy = chunk.cy * CHUNK_SIZE + ly;
+          cb(wx, wy, this.overlays.get(`${wx},${wy}`) ?? chunk.tiles[ly][lx]);
         }
       }
     }

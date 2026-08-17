@@ -22,7 +22,7 @@ export type GatePhase =
   | 'connection_lost'
   | 'exited';
 
-export type PlayMode = 'offline' | 'online';
+export type PlayMode = 'offline' | 'online' | 'sandbox';
 
 export type ServerKind = 'official' | 'community' | 'private' | 'lan' | 'direct' | 'self_hosted';
 

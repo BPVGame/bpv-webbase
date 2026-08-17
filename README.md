@@ -63,9 +63,11 @@ Classic 16-bit RPG + Real-world exploration + Online multiplayer + Tournaments +
 
 | Input | Action |
 | --- | --- |
-| Main menu | PLAY / ONLINE / OFFLINE / SERVERS / SETTINGS / EXIT |
-| WASD / arrows / D-pad | Move (in world) |
-| `E` / Space | Talk / listen |
+| Main menu | PLAY / ONLINE / OFFLINE / **SANDBOX** / SERVERS / SETTINGS / EXIT |
+| WASD / arrows / D-pad | Move (footstep SFX) |
+| `J` / Space (no NPC) / JUMP | Jump |
+| `E` / Space (near NPC) | Talk / listen |
+| Sandbox `C` / `F` / `G` | Claim land / plant flag / government panel |
 | `I` or `Tab` | Open bag |
 | `Esc` / ☰ | Pause menu (travel, Fish Cards, settings, leave world) |
 
@@ -93,7 +95,10 @@ Offline play does not require the server. Online / Servers uses `/api/game/*` (p
 
 ```bash
 npm run test:gate      # GameGate + dedicated-server authority
+npm run test:sandbox   # Governor / AI civic VM
 ```
+
+**Sandbox** is a local civic overlay on the infinite IsoEarth: found a government, claim land, plant flags, and let an AI steward help run the state. It does not mix with online shard saves.
 
 Set `VITE_BPV_API_URL=http://localhost:3001` to point the client at the local server.
 
