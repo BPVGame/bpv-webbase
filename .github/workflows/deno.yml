@@ -38,5 +38,17 @@ jobs:
       - name: Run linter
         run: deno lint
 
+      # This repo is Node/Vite/Express. Deno must not execute *.test.ts files
+      # written for node:test (it would fail with "No test modules found" or
+      # Node-only imports). Run the real suite with Node instead.
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
       - name: Run tests
-        run: deno test -A
+        run: |
+          npm ci
+          npm run test:gate
+          npm run test:npc

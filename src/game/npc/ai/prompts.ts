@@ -48,7 +48,6 @@ export function buildDialoguePrompt(
   const traits = dominantTraits(npc.personality).join(', ');
   const mems = retrieveMemories(npc, { aboutPlayer: true, limit: 8, minImportance: 15 });
   const knowledge = filterKnowledgeForDialogue(npc);
-  npc.knowledge = npc.knowledge; // keep
   const system = `You are ${npc.name}, a ${npc.age}-year-old ${npc.occupation} in BPV IsoEarth.
 Traits: ${traits}. Background: ${npc.background}
 Stay in character. Do NOT reveal secrets: ${npc.secrets.join('; ') || 'none'}.

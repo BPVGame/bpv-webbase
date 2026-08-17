@@ -1,0 +1,18 @@
+{
+  "lint": {
+    "exclude": ["node_modules", "dist", "ios"],
+    "rules": {
+      "exclude": [
+        "no-explicit-any",
+        "no-unused-vars",
+        "no-node-globals",
+        "no-window",
+        "no-window-prefix",
+        "require-await"
+      ]
+    }
+  },
+  "test": {
+    "exclude": ["node_modules", "dist", "ios", "src", "server", "scripts"]
+  }
+}
