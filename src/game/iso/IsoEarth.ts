@@ -26,7 +26,11 @@ export interface RemotePlayer {
   shirt: string;
 }
 
-export type InteractPrompt = { npcId: string; name: string } | null;
+export type InteractPrompt =
+  | { kind: 'npc'; npcId: string; name: string }
+  | { kind: 'overhear'; npcId: string; name: string }
+  | { kind: 'player'; playerId: string; name: string }
+  | null;
 
 export class IsoEarth {
   private canvas: HTMLCanvasElement;
@@ -56,7 +60,10 @@ export class IsoEarth {
   public livingNpcs: NpcVisual[] = [];
   public interactPrompt: InteractPrompt = null;
   public onInteractNpc: ((npcId: string) => void) | null = null;
+  public onInteractOverhear: (() => void) | null = null;
+  public onInteractPlayer: ((playerId: string) => void) | null = null;
   public onNpcPromptChange: ((prompt: InteractPrompt) => void) | null = null;
+  public dialogueLocked = false;
   public keys: Record<string, boolean> = {};
   public joystickDir: { x: number; y: number } = { x: 0, y: 0 };
   public camX = 0;
@@ -179,19 +186,43 @@ export class IsoEarth {
     }
 
     npcDirector.updatePlayer(this.playerCol, this.playerRow);
+    npcDirector.setPlayerAppearance(
+      {
+        skin: this.avatar.skin,
+        hair: this.avatar.hair,
+        shirt: this.avatar.shirt,
+        pants: this.avatar.pants
+      },
+      this.avatar.username
+    );
     npcDirector.tick(delta);
     this.livingNpcs = npcDirector.getVisuals();
 
+    const overhear = npcDirector.dialogueRt.overhearHint;
     const near = npcDirector.nearbyInteractable(2.2);
-    const prompt: InteractPrompt = near ? { npcId: near.id, name: near.name } : null;
-    const prev = this.interactPrompt?.npcId ?? null;
+    const nearPlayer = this.nearestRemote(2.2);
+    let prompt: InteractPrompt = null;
+    if (overhear && npcDirector.dialogueRt.nearbyTalking(3.2)) {
+      prompt = { kind: 'overhear', npcId: overhear.npcId, name: overhear.names };
+    } else if (near) {
+      prompt = { kind: 'npc', npcId: near.id, name: near.name };
+    } else if (nearPlayer) {
+      prompt = { kind: 'player', playerId: nearPlayer.id, name: nearPlayer.username };
+    }
+    const prev = this.interactPrompt;
     this.interactPrompt = prompt;
-    if ((prompt?.npcId ?? null) !== prev) this.onNpcPromptChange?.(prompt);
+    const changed =
+      (prompt?.kind ?? null) !== (prev?.kind ?? null) ||
+      (prompt && 'npcId' in prompt ? prompt.npcId : prompt && 'playerId' in prompt ? prompt.playerId : null) !==
+        (prev && 'npcId' in prev ? prev.npcId : prev && 'playerId' in prev ? prev.playerId : null);
+    if (changed) this.onNpcPromptChange?.(prompt);
 
     const wantInteract = !!(this.keys['KeyE'] || this.keys['Space']);
-    if (wantInteract && !this.interactLatch && near) {
+    if (wantInteract && !this.interactLatch && !this.dialogueLocked && prompt) {
       this.interactLatch = true;
-      this.onInteractNpc?.(near.id);
+      if (prompt.kind === 'overhear') this.onInteractOverhear?.();
+      else if (prompt.kind === 'player') this.onInteractPlayer?.(prompt.playerId);
+      else this.onInteractNpc?.(prompt.npcId);
     }
     if (!wantInteract) this.interactLatch = false;
 
@@ -269,8 +300,30 @@ export class IsoEarth {
     };
   }
 
+  private nearestRemote(range: number) {
+    let best: RemotePlayer | null = null;
+    let bestD = range + 0.01;
+    for (const rp of this.remotePlayers) {
+      const d = Math.hypot(rp.col - this.playerCol, rp.row - this.playerRow);
+      if (d < bestD) {
+        bestD = d;
+        best = rp;
+      }
+    }
+    return best;
+  }
+
   private syncCamera(snap: boolean) {
-    const target = this.tileWorld(this.playerCol, this.playerRow);
+    const playerTarget = this.tileWorld(this.playerCol, this.playerRow);
+    const focus = npcDirector.dialogueRt.cameraFocus;
+    let target = playerTarget;
+    if (focus && focus.weight > 0) {
+      const f = this.tileWorld(focus.x, focus.y);
+      target = {
+        x: playerTarget.x + (f.x - playerTarget.x) * focus.weight,
+        y: playerTarget.y + (f.y - playerTarget.y) * focus.weight
+      };
+    }
     if (snap) {
       this.camX = target.x;
       this.camY = target.y;
@@ -344,6 +397,7 @@ export class IsoEarth {
       const { x, y } = this.gridToScreen(npc.col, npc.row);
       if (x < -80 || x > width + 80 || y < -100 || y > height + 100) continue;
       this.drawIsoAvatar(x, y, npc.skin, npc.hair, npc.shirt, npc.pants, npc.name, npc.activity.includes('travel') || npc.activity === 'flee');
+      if (npc.bubble) this.drawSpeechBubble(x, y, npc.bubble);
     }
 
     const p = this.gridToScreen(this.playerCol, this.playerRow);
@@ -562,6 +616,25 @@ export class IsoEarth {
     this.ctx.font = 'bold 9px "Press Start 2P", monospace';
     this.ctx.textAlign = 'center';
     this.ctx.fillText(name.slice(0, 12), cx, y - 25);
+  }
+
+  private drawSpeechBubble(cx: number, cy: number, text: string) {
+    const label = text.slice(0, 28);
+    this.ctx.font = 'bold 8px "Press Start 2P", monospace';
+    const w = Math.min(160, Math.max(48, label.length * 6.2));
+    const x = cx - w / 2;
+    const y = cy - 58;
+    this.ctx.fillStyle = 'rgba(250, 246, 236, 0.94)';
+    this.roundRect(x, y, w, 22, 6);
+    this.ctx.fillStyle = '#3a2f22';
+    this.ctx.beginPath();
+    this.ctx.moveTo(cx - 5, y + 22);
+    this.ctx.lineTo(cx, y + 28);
+    this.ctx.lineTo(cx + 5, y + 22);
+    this.ctx.fill();
+    this.ctx.fillStyle = '#2c1810';
+    this.ctx.textAlign = 'center';
+    this.ctx.fillText(label, cx, y + 14);
   }
 
   private roundRect(x: number, y: number, w: number, h: number, r: number) {

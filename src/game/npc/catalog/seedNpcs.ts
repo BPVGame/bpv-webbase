@@ -1,4 +1,4 @@
-import { LivingNpc, NpcOccupation } from '../types';
+import { AiTier, LivingNpc, NpcOccupation } from '../types';
 import { createPersonality, defaultEmotions, defaultNeeds } from '../personality';
 import { scheduleForOccupation, posFromWorld } from '../worldClock';
 import { makeItem } from '../economy';
@@ -56,6 +56,7 @@ function npcBase(
     lastAiCallAt: 0,
     lastAiLatencyMs: 0,
     simLod: 'abstract',
+    aiTier: extras?.aiTier ?? defaultAiTier(occupation),
     lifeEvents: [],
     ...extras
   };
@@ -63,6 +64,14 @@ function npcBase(
     addKnowledge(npc, k.topic, k.content, 'occupation', 0, 0.9);
   }
   return npc;
+}
+
+function defaultAiTier(occupation: NpcOccupation): AiTier {
+  if (occupation === 'mayor' || occupation === 'merchant' || occupation === 'baker' || occupation === 'card_master' || occupation === 'scholar') {
+    return 'important';
+  }
+  if (occupation === 'farmer' || occupation === 'courier' || occupation === 'artisan') return 'background';
+  return 'normal';
 }
 
 /** Seed distinct important NPCs at district capitals — never identical personalities. */
@@ -328,5 +337,47 @@ export function seedLivingNpcs(): LivingNpc[] {
     35
   );
 
-  return [mayor, finn, maria, marina, harborMaster, shopkeep, guard, scholar, innkeeper, farmer];
+  const lina = npcBase(
+    'npc_courier_lina',
+    'Lina Drift',
+    22,
+    'courier',
+    { x: cc.x + 2, y: cc.y + 2 },
+    { x: cc.x + 5, y: cc.y },
+    {
+      sociality: 0.8,
+      friendliness: 0.7,
+      curiosity: 0.6,
+      reservedness: 0.25,
+      humor: 0.45
+    },
+    'Plaza courier who never walks in a straight line.',
+    'Lina trades greetings as often as parcels.',
+    { skin: '#f3d5b5', hair: '#9a3412', shirt: '#38bdf8', pants: '#0f172a' },
+    22,
+    { aiTier: 'background', preferences: ['shortcuts'] }
+  );
+
+  const poe = npcBase(
+    'npc_artisan_poe',
+    'Poe Wink',
+    26,
+    'artisan',
+    { x: cc.x + 1, y: cc.y + 3 },
+    { x: cc.x - 1, y: cc.y + 2 },
+    {
+      introversion: 0.75,
+      reservedness: 0.7,
+      kindness: 0.6,
+      suspicion: 0.4,
+      friendliness: 0.35
+    },
+    'Quiet sign-painter at the plaza edge.',
+    'Poe notices everything and says almost nothing.',
+    { skin: '#e8c4a8', hair: '#1e1b4b', shirt: '#a3e635', pants: '#365314' },
+    18,
+    { aiTier: 'background', fears: ['crowds'] }
+  );
+
+  return [mayor, finn, maria, marina, harborMaster, shopkeep, guard, scholar, innkeeper, farmer, lina, poe];
 }

@@ -17,3 +17,5 @@ export { executeTool, listTools } from './tools/registry';
 export { parseStructuredDecision, validateDecision } from './ai/structured';
 export { planIntention } from './simulation/planner';
 export { computeLod, AiBudget } from './simulation/lod';
+export { DialogueRuntime } from './dialogue/runtime';
+export type { RpgDialogueScene, ConversationRecord } from './dialogue/types';
