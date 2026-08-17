@@ -13,6 +13,8 @@ interface GameHUDProps {
   onToggleInventory: () => void;
   equippedLabel?: string;
   equippedCount?: number;
+  /** Optional living-world clock from NpcDirector */
+  worldClock?: { dayStr: string; timeStr: string; weatherIcon?: string };
 }
 
 /**
@@ -29,12 +31,15 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   onOpenMenu,
   onToggleInventory,
   equippedLabel = 'Fish Charm',
-  equippedCount = 3
+  equippedCount = 3,
+  worldClock
 }) => {
   const [muted, setMuted] = React.useState(false);
   const now = new Date();
-  const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const dayStr = now.toLocaleDateString([], { weekday: 'short', day: 'numeric' }).toUpperCase();
+  const timeStr = worldClock?.timeStr ?? now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const dayStr =
+    worldClock?.dayStr ?? now.toLocaleDateString([], { weekday: 'short', day: 'numeric' }).toUpperCase();
+  const weatherIcon = worldClock?.weatherIcon ?? '☀️';
 
   return (
     <div className="game-hud pointer-events-none">
@@ -43,7 +48,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
         <span className="hud-day">{dayStr}</span>
         <span className="hud-time">{timeStr}</span>
         <span className="hud-moon" aria-hidden>
-          ☀️
+          {weatherIcon}
         </span>
       </div>
 

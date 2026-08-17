@@ -173,6 +173,11 @@ function villageInCell(cellX: number, cellY: number): VillageInfo | null {
   return { x, y, radius, kind, seed: cellX * 131 + cellY * 17 };
 }
 
+/** Public for NPC spawn / POI anchoring — same seeds as tile generation. */
+export function getNearbyVillages(wx: number, wy: number): VillageInfo[] {
+  return nearbyVillages(wx, wy);
+}
+
 function nearbyVillages(wx: number, wy: number): VillageInfo[] {
   const cx = Math.floor(wx / VILLAGE_CELL);
   const cy = Math.floor(wy / VILLAGE_CELL);

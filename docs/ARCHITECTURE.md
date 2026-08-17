@@ -32,7 +32,17 @@ Key files:
 - `src/game/iso/TiledMapLoader.ts` — Tiled bridge (authored pockets / POIs)
 - `maps/city-center.tmj` — sample Tiled map
 
-## Emoji Design Fish Cards
+## Living AI NPCs
+
+Neuriy ChatBase + ElloFive power NPC cognition; the IsoEarth engine stays authoritative.
+
+- Client: `src/game/npc/` (`NpcDirector`, memory, relationships, LOD simulation, tool registry)
+- Server: `server/npc/` (`POST /api/npc/ai` ElloFive proxy, optional state sync)
+- UI: talk with **E**, debug with **F3** (`NpcDialogueOverlay`, `NpcDebugPanel`)
+- Docs: `docs/LIVING_NPCS.md`
+
+NPCs use world coordinates, continue under chunk unload via abstract simulation, and fall back to deterministic behavior if AI is offline.
+
 
 Collectible cards framed like `fishcard.svg` (cyan/indigo holographic panels) with emoji faces as artwork.
 

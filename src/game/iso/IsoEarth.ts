@@ -6,6 +6,7 @@
 import { ISO_PALETTE, ISO_TILE_BY_ID, DistrictRealm } from './IsoTiles';
 import { ChunkWorld } from './ChunkWorld';
 import { DISTRICT_ORIGINS } from './WorldGen';
+import { npcDirector, NpcVisual } from '../npc/NpcDirector';
 
 export interface IsoPlayerAvatar {
   username: string;
@@ -21,8 +22,11 @@ export interface RemotePlayer {
   col: number;
   row: number;
   skin: string;
+  hair?: string;
   shirt: string;
 }
+
+export type InteractPrompt = { npcId: string; name: string } | null;
 
 export class IsoEarth {
   private canvas: HTMLCanvasElement;
@@ -49,6 +53,10 @@ export class IsoEarth {
   };
 
   public remotePlayers: RemotePlayer[] = [];
+  public livingNpcs: NpcVisual[] = [];
+  public interactPrompt: InteractPrompt = null;
+  public onInteractNpc: ((npcId: string) => void) | null = null;
+  public onNpcPromptChange: ((prompt: InteractPrompt) => void) | null = null;
   public keys: Record<string, boolean> = {};
   public joystickDir: { x: number; y: number } = { x: 0, y: 0 };
   public camX = 0;
@@ -61,6 +69,8 @@ export class IsoEarth {
   private moveCooldown = 0;
   private waterPhase = 0;
   private smokePhase = 0;
+  private interactLatch = false;
+  private npcBooted = false;
 
   constructor(canvas: HTMLCanvasElement, realm: DistrictRealm = 'city_center') {
     this.canvas = canvas;
@@ -70,6 +80,7 @@ export class IsoEarth {
     this.realm = realm;
     this.warpToDistrict(realm, true);
     this.setupInputs();
+    npcDirector.setWalkableChecker((x, y) => this.world.isWalkable(x, y));
   }
 
   /** Travel to a district region of the infinite plane (keeps seamless world). */
@@ -99,6 +110,10 @@ export class IsoEarth {
 
   public setRemotePlayers(players: RemotePlayer[]) {
     this.remotePlayers = players;
+  }
+
+  public setLivingNpcs(npcs: NpcVisual[]) {
+    this.livingNpcs = npcs;
   }
 
   public recenterOrigin() {
@@ -141,6 +156,7 @@ export class IsoEarth {
   public stop() {
     this.isRunning = false;
     if (this.animFrameId !== null) cancelAnimationFrame(this.animFrameId);
+    if (this.npcBooted) npcDirector.persist();
   }
 
   private loop = (ts: number) => {
@@ -156,6 +172,28 @@ export class IsoEarth {
     this.waterPhase += delta;
     this.smokePhase += delta;
     this.moveCooldown = Math.max(0, this.moveCooldown - delta);
+
+    if (!this.npcBooted) {
+      npcDirector.boot(this.avatar.username);
+      this.npcBooted = true;
+    }
+
+    npcDirector.updatePlayer(this.playerCol, this.playerRow);
+    npcDirector.tick(delta);
+    this.livingNpcs = npcDirector.getVisuals();
+
+    const near = npcDirector.nearbyInteractable(2.2);
+    const prompt: InteractPrompt = near ? { npcId: near.id, name: near.name } : null;
+    const prev = this.interactPrompt?.npcId ?? null;
+    this.interactPrompt = prompt;
+    if ((prompt?.npcId ?? null) !== prev) this.onNpcPromptChange?.(prompt);
+
+    const wantInteract = !!(this.keys['KeyE'] || this.keys['Space']);
+    if (wantInteract && !this.interactLatch && near) {
+      this.interactLatch = true;
+      this.onInteractNpc?.(near.id);
+    }
+    if (!wantInteract) this.interactLatch = false;
 
     let dx = 0;
     let dy = 0;
@@ -297,7 +335,15 @@ export class IsoEarth {
 
     for (const rp of this.remotePlayers) {
       const { x, y } = this.gridToScreen(rp.col, rp.row);
-      this.drawIsoAvatar(x, y, rp.skin, '#3d2914', rp.shirt, '#2c3e50', rp.username, false);
+      this.drawIsoAvatar(x, y, rp.skin, rp.hair || '#3d2914', rp.shirt, '#2c3e50', rp.username, false);
+    }
+
+    // Living NPCs (chunk-aware LOD visuals from NpcDirector)
+    const actors = [...this.livingNpcs].sort((a, b) => a.col + a.row - (b.col + b.row));
+    for (const npc of actors) {
+      const { x, y } = this.gridToScreen(npc.col, npc.row);
+      if (x < -80 || x > width + 80 || y < -100 || y > height + 100) continue;
+      this.drawIsoAvatar(x, y, npc.skin, npc.hair, npc.shirt, npc.pants, npc.name, npc.activity.includes('travel') || npc.activity === 'flee');
     }
 
     const p = this.gridToScreen(this.playerCol, this.playerRow);

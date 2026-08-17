@@ -168,7 +168,38 @@ export const App: React.FC = () => {
     { id: 3, username: 'AquaRider', level: 4, avatar_skin: '#fbcfe8', avatar_shirt: '#10b981' },
     { id: 4, username: 'CyberFisher', level: 7, avatar_skin: '#78350f', avatar_shirt: '#7c3aed' }
   ]);
+  const [worldClock, setWorldClock] = useState({ dayStr: 'DAY 1', timeStr: '08:00', weatherIcon: '☀️' });
+  const talkedNpcs = useRef(new Set<string>());
 
+  useEffect(() => {
+    const id = setInterval(() => {
+      const t = earthRef.current?.getWorldTime();
+      if (!t) return;
+      const icon =
+        t.weather === 'storm'
+          ? '⛈️'
+          : t.weather === 'rain'
+            ? '🌧️'
+            : t.weather === 'fog'
+              ? '🌫️'
+              : t.weather === 'cloudy'
+                ? '⛅'
+                : '☀️';
+      setWorldClock({ dayStr: t.date.toUpperCase(), timeStr: t.time, weatherIcon: icon });
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const onNpcTalked = (npcId: string) => {
+    if (talkedNpcs.current.has(npcId)) return;
+    talkedNpcs.current.add(npcId);
+    setMissions(prev =>
+      prev.map(m => {
+        if (m.mission_key !== 'talk_npc' || m.is_completed) return m;
+        return { ...m, progress: Math.min(m.target, m.progress + 1) };
+      })
+    );
+  };
   useEffect(() => {
     const locService = new LocationService();
     locationServiceRef.current = locService;
@@ -292,7 +323,13 @@ export const App: React.FC = () => {
 
   return (
     <div className="game-root">
-      <IsoEarthView ref={earthRef} avatar={avatar} visible={playing} onDistrictChange={onDistrictChange} />
+      <IsoEarthView
+        ref={earthRef}
+        avatar={avatar}
+        visible={playing}
+        onDistrictChange={onDistrictChange}
+        onNpcTalked={onNpcTalked}
+      />
 
       {playing && (
         <>
@@ -306,6 +343,7 @@ export const App: React.FC = () => {
               setMenuOpen(true);
             }}
             onToggleInventory={() => setInventoryOpen(v => !v)}
+            worldClock={worldClock}
           />
 
           <InventoryPanel open={inventoryOpen} onClose={() => setInventoryOpen(false)} gold={player.coins} />

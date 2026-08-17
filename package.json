@@ -8,6 +8,7 @@
     "build": "./node_modules/.bin/tsc && ./node_modules/.bin/vite build",
     "preview": "./node_modules/.bin/vite preview",
     "server": "./node_modules/.bin/tsx server/index.ts",
+    "test:npc": "./node_modules/.bin/tsx --test src/game/npc/__tests__/npc-core.test.ts",
     "capture:demo": "node scripts/capture-demo.mjs"
   },
   "dependencies": {
