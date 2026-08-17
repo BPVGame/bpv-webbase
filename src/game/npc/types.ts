@@ -8,6 +8,23 @@ export type ActorId = NpcId | 'player';
 
 export type SimulationLod = 'full' | 'reduced' | 'abstract' | 'dormant';
 
+/** AI budget class — background NPCs stay on templates. */
+export type AiTier = 'background' | 'normal' | 'important';
+
+export type DialogueEmotion =
+  | 'neutral'
+  | 'happy'
+  | 'sad'
+  | 'angry'
+  | 'surprised'
+  | 'confused'
+  | 'scared'
+  | 'embarrassed'
+  | 'excited'
+  | 'thinking'
+  | 'laughing'
+  | 'serious';
+
 export type NpcOccupation =
   | 'mayor'
   | 'merchant'
@@ -187,6 +204,8 @@ export interface LivingNpc {
   lastAiLatencyMs: number;
   lastAiTokens?: number;
   simLod: SimulationLod;
+  /** How much ElloFive this NPC is allowed to use. */
+  aiTier: AiTier;
   lifeEvents: Array<{ id: string; title: string; at: number; detail: string }>;
 }
 

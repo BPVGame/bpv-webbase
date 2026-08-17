@@ -181,6 +181,20 @@ export class BpvApiClient {
       { method: 'POST', body: JSON.stringify(payload) }
     ).catch(() => ({ ok: false, nearby: [] as Array<{ id: string; username: string; col: number; row: number }> }));
   }
+
+  sendPlayerChat(payload: { from: string; to: string; text: string; emotion?: string }) {
+    return this.request<{
+      ok: boolean;
+      echo?: { from: string; to: string; text: string; emotion: string; at: number };
+    }>('/api/npc/player-chat', { method: 'POST', body: JSON.stringify(payload) }).catch(() => ({ ok: false }));
+  }
+
+  getPlayerChat(a: string, b: string) {
+    const q = `a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`;
+    return this.request<{ ok: boolean; messages: Array<{ from: string; to: string; text: string; emotion: string; at: number }> }>(
+      `/api/npc/player-chat?${q}`
+    ).catch(() => ({ ok: false, messages: [] }));
+  }
 }
 
 export const bpvApi = new BpvApiClient();

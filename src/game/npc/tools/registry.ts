@@ -3,6 +3,8 @@
  */
 
 import { LivingNpc, PlayerSnapshot, WorldTimeState, WorldEvent, DynamicQuest } from '../types';
+import { rememberInteraction } from '../memory';
+import { applyRelationshipDelta } from '../relationships';
 
 export type ToolName =
   | 'get_world_time'
@@ -17,6 +19,13 @@ export type ToolName =
   | 'get_player_reputation'
   | 'get_nearby_objects'
   | 'find_location'
+  | 'get_location'
+  | 'get_npc_state'
+  | 'get_player_state'
+  | 'get_nearby_characters'
+  | 'get_active_quests'
+  | 'get_world_events'
+  | 'start_dialogue'
   | 'find_path'
   | 'move_npc'
   | 'follow_path'
@@ -259,14 +268,63 @@ export function registerDefaultTools() {
   });
 
   registry.set('talk_to_npc', () => ({ ok: true, data: { note: 'dialogue handled by director' } }));
+  registry.set('start_dialogue', () => ({ ok: true, data: { note: 'dialogue handled by director' } }));
   registry.set('start_quest', () => ({ ok: true, data: { note: 'quest start via director' } }));
   registry.set('give_quest', () => ({ ok: true, data: { note: 'quest give via director' } }));
   registry.set('buy_item', () => ({ ok: false, error: 'use_economy_module' }));
   registry.set('sell_item', () => ({ ok: false, error: 'use_economy_module' }));
   registry.set('give_item', () => ({ ok: true }));
   registry.set('take_item', () => ({ ok: true }));
-  registry.set('update_relationship', () => ({ ok: true, data: { note: 'use_relationships_module' } }));
-  registry.set('create_memory', () => ({ ok: true, data: { note: 'use_memory_module' } }));
+  registry.set('update_relationship', (args, ctx) => {
+    const npc = getNpc(ctx, requireString(args, 'npc_id'));
+    const target = requireString(args, 'target_id');
+    const clamp = (n: number) => Math.max(-15, Math.min(15, n));
+    const delta: Record<string, number> = {};
+    for (const k of ['trust', 'friendship', 'respect', 'fear', 'anger'] as const) {
+      if (typeof args[k] === 'number') delta[k] = clamp(args[k] as number);
+    }
+    applyRelationshipDelta(npc, target, delta, String(args.reason ?? 'tool').slice(0, 80), ctx.now);
+    return { ok: true, data: npc.relationships.find(r => r.targetId === target)?.scores };
+  });
+  registry.set('create_memory', (args, ctx) => {
+    const npc = getNpc(ctx, requireString(args, 'npc_id'));
+    const importance = Math.max(10, Math.min(90, typeof args.importance === 'number' ? args.importance : 45));
+    const mem = rememberInteraction(npc, {
+      event: requireString(args, 'event').slice(0, 64),
+      description: String(args.description ?? '').slice(0, 240),
+      importance,
+      emotion: String(args.emotion ?? 'neutral').slice(0, 24),
+      timestamp: ctx.now,
+      significant: importance >= 70
+    });
+    return { ok: true, data: { id: mem.id } };
+  });
+  registry.set('get_location', (args, ctx) => registry.get('get_npc_location')!(args, ctx));
+  registry.set('get_npc_state', (args, ctx) => registry.get('get_npc_information')!(args, ctx));
+  registry.set('get_player_state', (args, ctx) => registry.get('get_player_information')!(args, ctx));
+  registry.set('get_nearby_characters', (args, ctx) => {
+    const nearby = executeTool('get_nearby_npcs', args, ctx);
+    return {
+      ok: true,
+      data: {
+        npcs: nearby.data,
+        player: { id: ctx.player.id, username: ctx.player.username, x: ctx.player.worldX, y: ctx.player.worldY }
+      }
+    };
+  });
+  registry.set('get_active_quests', (_a, ctx) => ({
+    ok: true,
+    data: ctx.quests.filter(q => q.status === 'active' || q.status === 'available').map(q => ({
+      id: q.id,
+      title: q.title,
+      status: q.status,
+      giverId: q.giverId
+    }))
+  }));
+  registry.set('get_world_events', (_a, ctx) => ({
+    ok: true,
+    data: ctx.events.slice(0, 12).map(e => ({ id: e.id, kind: e.kind, title: e.title, description: e.description }))
+  }));
   registry.set('schedule_activity', (args, ctx) => {
     const npc = getNpc(ctx, requireString(args, 'npc_id'));
     npc.currentActivity = requireString(args, 'activity').slice(0, 64);

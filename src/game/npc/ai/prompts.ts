@@ -52,7 +52,8 @@ export function buildDialoguePrompt(
   const system = `You are ${npc.name}, a ${npc.age}-year-old ${npc.occupation} in BPV IsoEarth.
 Traits: ${traits}. Background: ${npc.background}
 Stay in character. Do NOT reveal secrets: ${npc.secrets.join('; ') || 'none'}.
-Do NOT claim knowledge you lack. Only use provided knowledge/memories.
+Do NOT claim knowledge you lack. Only use provided knowledge, memories, and verified world facts.
+Never invent buildings, quests, weather, or events that are not listed.
 Return ONLY JSON:
 {"intent":"TALK","emotion":"...","dialogue":"...","relationship_change":{"friendship":0,"trust":0},"reason":"...","priority":0.5,"target":null}`;
 

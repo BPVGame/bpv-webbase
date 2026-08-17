@@ -44,8 +44,12 @@ Infinite `WorldGen` / `ChunkWorld` are **unchanged** in behavior; NPCs use world
 
 ## Controls
 
-- **E / Space** — talk to nearby NPC  
+- **E / Space** — talk to nearby NPC, listen in on NPC↔NPC talk, or talk to a nearby online player  
 - **F3** — NPC debug panel (force AI, teleport, inspect memory)
+
+Dialogue uses a large RPG box (portrait, name, typewriter text, emotion, choices). Opening greetings and NPC↔NPC lines are **pre-authored from personality + world facts**. ElloFive is used for unexpected player questions and important NPC decisions.
+
+Meaningful conversations are stored in `localStorage` key `bpv_conversations_v1` (not every “hello”). Player↔player lines sync through `POST /api/npc/player-chat`.
 
 ## Environment
 
