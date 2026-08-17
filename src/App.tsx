@@ -2,11 +2,11 @@
  * BPV Game — full-screen cozy 16-bit RPG shell.
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { LocationService, DistrictName } from './game/LocationService';
 import { DexTab } from './components/DexMenu';
-import { FishCardView, FishCardData } from './components/FishCardView';
-import { TournamentScreen, TournamentData } from './components/TournamentScreen';
+import { FishCardData } from './components/FishCardView';
+import { TournamentData } from './components/TournamentPopup';
 import { MissionsScreen, MissionData } from './components/MissionsScreen';
 import { AvatarCustomizer } from './components/AvatarCustomizer';
 import { FriendsScreen, NearbyPlayer } from './components/FriendsScreen';
@@ -14,72 +14,22 @@ import { IsoEarthView, IsoEarthViewHandle } from './components/IsoEarthView';
 import { GameHUD } from './components/GameHUD';
 import { PauseMenu } from './components/PauseMenu';
 import { InventoryPanel } from './components/InventoryPanel';
+import { FishCardAlbumPopup } from './components/FishCardAlbumPopup';
+import { TournamentPopup } from './components/TournamentPopup';
+import { RewardToast } from './components/RewardToast';
 import { retroAudio } from './game/AudioSynth';
 import { DistrictRealm } from './game/iso/IsoTiles';
 import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import {
+  starterCards,
+  findCardDef,
+  defToOwned,
+  rollPackCard,
+  PACK_COST,
+  RARE_PACK_COST
+} from './data/fishCards';
 
-const STARTER_CARDS: FishCardData[] = [
-  {
-    id: 101,
-    card_slug: 'neon_guppy',
-    name: 'Neon Pixel Guppy',
-    rarity: 'Common',
-    level: 2,
-    attack: 25,
-    defense: 18,
-    speed: 35,
-    description: 'A swift pixelated freshwater guppy glowing in cyan neon.',
-    emoji: '🐟'
-  },
-  {
-    id: 102,
-    card_slug: 'cyber_bass',
-    name: 'Cyber Bass',
-    rarity: 'Uncommon',
-    level: 1,
-    attack: 45,
-    defense: 38,
-    speed: 28,
-    description: 'Aggressive robotic bass with laser fins and armored scales.',
-    emoji: '🐠'
-  },
-  {
-    id: 103,
-    card_slug: 'plasma_salmon',
-    name: 'Plasma Salmon',
-    rarity: 'Rare',
-    level: 1,
-    attack: 75,
-    defense: 62,
-    speed: 55,
-    description: 'Legendary river runner glowing with plasma energy.',
-    emoji: '🐡'
-  },
-  {
-    id: 104,
-    card_slug: 'quantum_kraken',
-    name: 'Quantum Kraken',
-    rarity: 'Legendary',
-    level: 3,
-    attack: 140,
-    defense: 125,
-    speed: 95,
-    description: 'Deep sea mythic organism capable of warping space.',
-    emoji: '🐙'
-  },
-  {
-    id: 105,
-    card_slug: 'emoji_destin',
-    name: 'Emoji Destin',
-    rarity: 'Epic',
-    level: 1,
-    attack: 88,
-    defense: 70,
-    speed: 80,
-    description: 'Emoji Design Card — holographic destin fish born from IsoEarth tides.',
-    emoji: '✨'
-  }
-];
+const STARTER_CARDS: FishCardData[] = starterCards();
 
 export const App: React.FC = () => {
   const earthRef = useRef<IsoEarthViewHandle>(null);
@@ -106,26 +56,66 @@ export const App: React.FC = () => {
   });
 
   const [cards, setCards] = useState<FishCardData[]>(STARTER_CARDS);
+  const [cardsOpen, setCardsOpen] = useState(false);
+  const [tournamentsOpen, setTournamentsOpen] = useState(false);
+  const [joinedTournaments, setJoinedTournaments] = useState<number[]>([2]);
+  const [rewardCard, setRewardCard] = useState<FishCardData | null>(null);
+  const [rewardMessage, setRewardMessage] = useState('New card earned');
   const [tournaments, setTournaments] = useState<TournamentData[]>([
     {
       id: 1,
       name: 'Pixel Championship Cup',
-      description: 'Official BPV Fish Card championship battle.',
+      description: 'Official BPV Fish Card championship — win Champion Tuna.',
       max_players: 16,
       current_players: 12,
       status: 'open',
-      prize_description: '3 Rare Fish Cards + 500 Coins',
-      start_time: 'Starting Soon'
+      prize_description: 'Champion Tuna + 500 Coins',
+      start_time: 'Starting Soon',
+      prize_card_slug: 'tournament_tuna'
     },
     {
       id: 2,
       name: 'Harbor Masters League',
-      description: 'Location-based aquatic tournament.',
+      description: 'Dockside bouts. Join to earn Dockside Crab.',
       max_players: 8,
       current_players: 6,
       status: 'open',
-      prize_description: 'Legendary Quantum Kraken Card',
-      start_time: 'In 20 mins'
+      prize_description: 'Dockside Crab + Tide Angelfish',
+      start_time: 'In 20 mins',
+      prize_card_slug: 'dock_crab'
+    },
+    {
+      id: 3,
+      name: 'Night Tide Invitational',
+      description: 'Moonlit arena under Pixel Harbor lanterns.',
+      max_players: 8,
+      current_players: 3,
+      status: 'open',
+      prize_description: 'Lunar Jelly (Legendary)',
+      start_time: 'Tonight',
+      prize_card_slug: 'lunar_jellyfish'
+    },
+    {
+      id: 4,
+      name: 'Storm Circuit',
+      description: 'Rain-soaked river battles. Pack heat and Storm Eels.',
+      max_players: 12,
+      current_players: 7,
+      status: 'open',
+      prize_description: 'Storm Eel + 200 Coins',
+      start_time: 'After rain',
+      prize_card_slug: 'storm_eel'
+    },
+    {
+      id: 5,
+      name: 'Arena Ink Cup',
+      description: 'Tournament Hub showcase hosted by Card Master Finn.',
+      max_players: 16,
+      current_players: 9,
+      status: 'open',
+      prize_description: 'Ink Octopus (Epic)',
+      start_time: 'Open now',
+      prize_card_slug: 'ink_octopus'
     }
   ]);
   const [missions, setMissions] = useState<MissionData[]>([
@@ -138,7 +128,8 @@ export const App: React.FC = () => {
       target: 500,
       is_completed: false,
       reward_xp: 100,
-      reward_coins: 150
+      reward_coins: 150,
+      reward_card_slug: 'meadow_trout'
     },
     {
       id: 2,
@@ -149,7 +140,8 @@ export const App: React.FC = () => {
       target: 3,
       is_completed: false,
       reward_xp: 50,
-      reward_coins: 80
+      reward_coins: 80,
+      reward_card_slug: 'garden_goldfish'
     },
     {
       id: 3,
@@ -160,7 +152,8 @@ export const App: React.FC = () => {
       target: 1,
       is_completed: true,
       reward_xp: 150,
-      reward_coins: 300
+      reward_coins: 300,
+      reward_card_slug: 'spark_seahorse'
     }
   ]);
   const [nearbyPlayers] = useState<NearbyPlayer[]>([
@@ -216,13 +209,27 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
       if (e.code === 'Escape') {
-        if (activeTab !== 'PLAY') {
+        if (cardsOpen) {
+          setCardsOpen(false);
+        } else if (tournamentsOpen) {
+          setTournamentsOpen(false);
+        } else if (activeTab !== 'PLAY') {
           setActiveTab('PLAY');
         } else {
           setMenuOpen(m => !m);
           setInventoryOpen(false);
         }
+      }
+      if (typing) return;
+      if (e.code === 'KeyC' && activeTab === 'PLAY' && !menuOpen) {
+        setCardsOpen(v => !v);
+        setTournamentsOpen(false);
+      }
+      if (e.code === 'KeyT' && activeTab === 'PLAY' && !menuOpen) {
+        setTournamentsOpen(v => !v);
+        setCardsOpen(false);
       }
       if (e.code === 'KeyI' || e.code === 'Tab') {
         if (e.code === 'Tab') e.preventDefault();
@@ -231,7 +238,19 @@ export const App: React.FC = () => {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [activeTab, menuOpen]);
+  }, [activeTab, menuOpen, cardsOpen, tournamentsOpen]);
+
+  const grantCard = (slug: string, message: string): FishCardData | null => {
+    const def = findCardDef(slug);
+    if (!def) return null;
+    if (cards.some(c => c.card_slug === slug)) return null;
+    const granted = defToOwned(def);
+    setCards(prev => (prev.some(c => c.card_slug === slug) ? prev : [...prev, granted]));
+    setRewardCard(granted);
+    setRewardMessage(message);
+    retroAudio.playItemPickup();
+    return granted;
+  };
 
   const handleUpgradeCard = (cardId: number) => {
     const card = cards.find(c => c.id === cardId);
@@ -249,29 +268,89 @@ export const App: React.FC = () => {
     );
   };
 
+  const handleBuyPack = (rare: boolean) => {
+    const cost = rare ? RARE_PACK_COST : PACK_COST;
+    if (player.coins < cost) return;
+    setPlayer(p => ({ ...p, coins: p.coins - cost }));
+    const ownedSlugs = new Set(cards.map(c => c.card_slug));
+    const def = rollPackCard(ownedSlugs, rare);
+    const granted = defToOwned(def);
+    setCards(prev => (prev.some(c => c.card_slug === def.card_slug) ? prev : [...prev, granted]));
+    setRewardCard(granted);
+    setRewardMessage(rare ? 'Rare Pack opened' : 'Card Pack opened');
+    retroAudio.playQuestComplete();
+  };
+
   const handleClaimMission = (missionId: number) => {
     const mission = missions.find(m => m.id === missionId);
     if (!mission || mission.is_completed) return;
     retroAudio.playQuestComplete();
     setPlayer(p => ({ ...p, coins: p.coins + mission.reward_coins, xp: p.xp + mission.reward_xp }));
     setMissions(prev => prev.map(m => (m.id === missionId ? { ...m, is_completed: true } : m)));
+    if (mission.reward_card_slug) grantCard(mission.reward_card_slug, `Quest reward: ${mission.title}`);
   };
 
   const handleCreateTournament = (name: string, description: string, maxPlayers: number, prize: string) => {
     retroAudio.playClick();
+    const id = Date.now();
     setTournaments([
       {
-        id: Date.now(),
+        id,
         name,
         description,
         max_players: maxPlayers,
         current_players: 1,
         status: 'open',
         prize_description: prize,
-        start_time: 'Starting Soon'
+        start_time: 'Starting Soon',
+        prize_card_slug: 'pixel_piranha'
       },
       ...tournaments
     ]);
+    setJoinedTournaments(prev => [...prev, id]);
+    setMissions(prev =>
+      prev.map(m =>
+        m.mission_key === 'join_tournament' && !m.is_completed
+          ? { ...m, progress: Math.min(m.target, m.progress + 1) }
+          : m
+      )
+    );
+  };
+
+  const handleJoinTournament = (id: number) => {
+    const t = tournaments.find(x => x.id === id);
+    if (!t || joinedTournaments.includes(id)) return;
+    setJoinedTournaments(prev => [...prev, id]);
+    setTournaments(prev =>
+      prev.map(x => (x.id === id ? { ...x, current_players: Math.min(x.max_players, x.current_players + 1) } : x))
+    );
+    setMissions(prev =>
+      prev.map(m =>
+        m.mission_key === 'join_tournament' && !m.is_completed
+          ? { ...m, progress: Math.min(m.target, m.progress + 1) }
+          : m
+      )
+    );
+    if (t.prize_card_slug === 'dock_crab' || t.prize_card_slug === 'pixel_piranha') {
+      grantCard(t.prize_card_slug, `Joined ${t.name}`);
+    } else {
+      grantCard('coral_minnow', `Entry gift from ${t.name}`);
+    }
+    setPlayer(p => ({ ...p, coins: p.coins + 25 }));
+  };
+
+  const handleBattleTournament = (id: number) => {
+    const t = tournaments.find(x => x.id === id);
+    if (!t) return;
+    const win = Math.random() > 0.35;
+    if (win) {
+      setPlayer(p => ({ ...p, coins: p.coins + 180, xp: p.xp + 80 }));
+      if (t.prize_card_slug) grantCard(t.prize_card_slug, `Victory — ${t.name}`);
+      else grantCard('tide_angelfish', `Victory — ${t.name}`);
+    } else {
+      setPlayer(p => ({ ...p, coins: p.coins + 40, xp: p.xp + 20 }));
+      grantCard('candy_clownfish', `Consolation from ${t.name}`);
+    }
   };
 
   const handleSaveAvatar = (newAvatar: {
@@ -319,7 +398,22 @@ export const App: React.FC = () => {
     pants: player.avatar_pants
   };
 
+  const dismissReward = useCallback(() => setRewardCard(null), []);
   const playing = activeTab === 'PLAY';
+
+  const openCards = () => {
+    setMenuOpen(false);
+    setTournamentsOpen(false);
+    setCardsOpen(true);
+    setActiveTab('PLAY');
+  };
+
+  const openTournaments = () => {
+    setMenuOpen(false);
+    setCardsOpen(false);
+    setTournamentsOpen(true);
+    setActiveTab('PLAY');
+  };
 
   return (
     <div className="game-root">
@@ -343,6 +437,10 @@ export const App: React.FC = () => {
               setMenuOpen(true);
             }}
             onToggleInventory={() => setInventoryOpen(v => !v)}
+            onOpenCards={openCards}
+            onOpenTournaments={openTournaments}
+            equippedLabel="Fish Cards"
+            equippedCount={cards.length}
             worldClock={worldClock}
           />
 
@@ -356,9 +454,38 @@ export const App: React.FC = () => {
             onDistrict={r => earthRef.current?.loadDistrict(r)}
             onNavigate={tab => {
               setMenuOpen(false);
+              if (tab === 'CARDS') {
+                openCards();
+                return;
+              }
+              if (tab === 'TOURNAMENTS') {
+                openTournaments();
+                return;
+              }
               setActiveTab(tab);
             }}
           />
+
+          <FishCardAlbumPopup
+            open={cardsOpen}
+            onClose={() => setCardsOpen(false)}
+            owned={cards}
+            coins={player.coins}
+            onUpgrade={handleUpgradeCard}
+            onBuyPack={handleBuyPack}
+          />
+
+          <TournamentPopup
+            open={tournamentsOpen}
+            onClose={() => setTournamentsOpen(false)}
+            tournaments={tournaments}
+            joinedIds={joinedTournaments}
+            onCreateTournament={handleCreateTournament}
+            onJoinTournament={handleJoinTournament}
+            onBattleTournament={handleBattleTournament}
+          />
+
+          <RewardToast card={rewardCard} message={rewardMessage} onDismiss={dismissReward} />
 
           <div className="game-dpad">
             <button
@@ -419,21 +546,15 @@ export const App: React.FC = () => {
           {activeTab === 'CARDS' && (
             <div className="dex-scroll">
               <h2>Emoji Design Fish Cards</h2>
-              <p>Collectible holographic cards — tournament loot & IsoEarth drops.</p>
-              <div className="dex-cards">
-                {cards.map(c => (
-                  <FishCardView key={c.id} card={c} onUpgrade={handleUpgradeCard} playerCoins={player.coins} />
-                ))}
-              </div>
+              <p>Use the in-world album popup (C or ✨) — this fallback stays for older navigation.</p>
             </div>
           )}
 
           {activeTab === 'TOURNAMENTS' && (
-            <TournamentScreen
-              tournaments={tournaments}
-              onCreateTournament={handleCreateTournament}
-              onJoinTournament={id => alert(`Joined Tournament #${id}!`)}
-            />
+            <div className="dex-scroll">
+              <h2>Tournaments</h2>
+              <p>Open the arena popup from the HUD trophy or pause menu.</p>
+            </div>
           )}
 
           {activeTab === 'MISSIONS' && (

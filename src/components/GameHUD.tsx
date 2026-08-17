@@ -11,6 +11,8 @@ interface GameHUDProps {
   maxHealth?: number;
   onOpenMenu: () => void;
   onToggleInventory: () => void;
+  onOpenCards?: () => void;
+  onOpenTournaments?: () => void;
   equippedLabel?: string;
   equippedCount?: number;
   /** Optional living-world clock from NpcDirector */
@@ -30,6 +32,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   maxHealth = 10,
   onOpenMenu,
   onToggleInventory,
+  onOpenCards,
+  onOpenTournaments,
   equippedLabel = 'Fish Charm',
   equippedCount = 3,
   worldClock
@@ -89,10 +93,42 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             </button>
           ))}
         </div>
+        <div className="hud-coins-row">
         <div className="hud-coins">
           <Coins size={13} />
           <span>{player.coins}</span>
           <span className="hud-lvl">Lv{player.level}</span>
+        </div>
+        {(onOpenCards || onOpenTournaments) && (
+          <div className="hud-shortcuts">
+            {onOpenCards ? (
+              <button
+                type="button"
+                className="hud-shortcut"
+                onClick={() => {
+                  retroAudio.playClick();
+                  onOpenCards();
+                }}
+                aria-label="Fish Cards"
+              >
+                ✨
+              </button>
+            ) : null}
+            {onOpenTournaments ? (
+              <button
+                type="button"
+                className="hud-shortcut"
+                onClick={() => {
+                  retroAudio.playClick();
+                  onOpenTournaments();
+                }}
+                aria-label="Tournaments"
+              >
+                🏆
+              </button>
+            ) : null}
+          </div>
+        )}
         </div>
       </div>
 
@@ -108,7 +144,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           </div>
         </div>
         <p className="hud-hint">
-          WASD move · I bag · Esc menu · {metersWalked}m walked
+          WASD move · I bag · Esc menu · ✨ cards · 🏆 arena · {metersWalked}m walked
         </p>
       </div>
 

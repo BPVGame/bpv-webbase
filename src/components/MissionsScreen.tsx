@@ -11,6 +11,7 @@ export interface MissionData {
   is_completed: boolean;
   reward_xp: number;
   reward_coins: number;
+  reward_card_slug?: string;
 }
 
 interface MissionsScreenProps {
@@ -81,6 +82,9 @@ export const MissionsScreen: React.FC<MissionsScreenProps> = ({ missions, onClai
                   <div className="flex items-center gap-1 text-purple-400 font-bold">
                     <Zap className="w-3.5 h-3.5" /> +{m.reward_xp} XP
                   </div>
+                  {m.reward_card_slug ? (
+                    <div className="text-[10px] text-cyan-300 font-sans">+ Fish Card</div>
+                  ) : null}
                 </div>
 
                 <button
