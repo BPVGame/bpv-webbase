@@ -181,6 +181,135 @@ export class BpvApiClient {
       { method: 'POST', body: JSON.stringify(payload) }
     ).catch(() => ({ ok: false, nearby: [] as Array<{ id: string; username: string; col: number; row: number }> }));
   }
+
+  sendPlayerChat(payload: { from: string; to: string; text: string; emotion?: string }) {
+    return this.request<{
+      ok: boolean;
+      echo?: { from: string; to: string; text: string; emotion: string; at: number };
+    }>('/api/npc/player-chat', { method: 'POST', body: JSON.stringify(payload) }).catch(() => ({ ok: false }));
+  }
+
+  getPlayerChat(a: string, b: string) {
+    const q = `a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`;
+    return this.request<{ ok: boolean; messages: Array<{ from: string; to: string; text: string; emotion: string; at: number }> }>(
+      `/api/npc/player-chat?${q}`
+    ).catch(() => ({ ok: false, messages: [] }));
+  }
+
+  private gameOrigin(server?: { address: string; port: number; protocol: string }): string | null {
+    if (!server?.address) return null;
+    const localHosts = new Set(['127.0.0.1', 'localhost']);
+    if (typeof window !== 'undefined') localHosts.add(window.location.hostname);
+    const sameHost = localHosts.has(server.address);
+    const proxyPort = 3001;
+    if (sameHost && (server.port === proxyPort || server.port === 80 || server.port === 443)) return null;
+    const proto = server.protocol === 'https' ? 'https' : 'http';
+    return `${proto}://${server.address}:${server.port}`;
+  }
+
+  private async tryGame<T>(
+    path: string,
+    init: RequestInit = {},
+    fallback: T,
+    server?: { address: string; port: number; protocol: string }
+  ): Promise<T> {
+    const origin = this.gameOrigin(server);
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(init.headers as Record<string, string>)
+    };
+    if (this.token) headers.Authorization = `Bearer ${this.token}`;
+    if (origin) {
+      try {
+        const res = await fetch(`${origin}${path}`, { ...init, headers });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          return { ...fallback, ...(typeof err === 'object' && err ? err : {}) } as T;
+        }
+        return (await res.json()) as T;
+      } catch {
+        return fallback;
+      }
+    }
+    try {
+      return await this.request<T>(path, init);
+    } catch {
+      try {
+        const res = await fetch(path, { ...init, headers });
+        if (!res.ok) return fallback;
+        return (await res.json()) as T;
+      } catch {
+        return fallback;
+      }
+    }
+  }
+
+  gameHealth(server?: { address: string; port: number; protocol: string }) {
+    return this.tryGame(
+      '/api/game/health',
+      {},
+      { ok: false as const, players: undefined as number | undefined, maxPlayers: undefined as number | undefined },
+      server
+    );
+  }
+
+  listGameServers() {
+    return this.tryGame<{ ok: boolean; servers: any[] }>('/api/game/directory', {}, { ok: false, servers: [] });
+  }
+
+  registerGameServer(payload: Record<string, unknown>) {
+    return this.tryGame('/api/game/directory', { method: 'POST', body: JSON.stringify(payload) }, { ok: false });
+  }
+
+  joinGameServer(payload: Record<string, unknown>, server?: { address: string; port: number; protocol: string }) {
+    return this.tryGame<any>(
+      '/api/game/session/join',
+      { method: 'POST', body: JSON.stringify(payload) },
+      { ok: false, error: 'Unable to reach game server' },
+      server
+    );
+  }
+
+  leaveGameServer(sessionId: string, server?: { address: string; port: number; protocol: string }) {
+    return this.tryGame(
+      '/api/game/session/leave',
+      { method: 'POST', body: JSON.stringify({ sessionId }) },
+      { ok: true },
+      server
+    );
+  }
+
+  gameSnapshot(sessionId: string, server?: { address: string; port: number; protocol: string }) {
+    return this.tryGame<{ ok: boolean; snapshot?: any }>(
+      `/api/game/snapshot?sessionId=${encodeURIComponent(sessionId)}`,
+      {},
+      { ok: false },
+      server
+    ).then(r => r.snapshot ?? null);
+  }
+
+  gameAction(
+    sessionId: string,
+    type: string,
+    payload: Record<string, unknown> = {},
+    server?: { address: string; port: number; protocol: string }
+  ) {
+    return this.tryGame(
+      '/api/game/action',
+      { method: 'POST', body: JSON.stringify({ sessionId, type, payload }) },
+      { ok: false, error: 'offline' },
+      server
+    );
+  }
+
+  gameAdmin(sessionId: string, server?: { address: string; port: number; protocol: string }) {
+    return this.tryGame(
+      `/api/game/admin?sessionId=${encodeURIComponent(sessionId)}`,
+      {},
+      { ok: false, error: 'offline' },
+      server
+    );
+  }
 }
 
 export const bpvApi = new BpvApiClient();

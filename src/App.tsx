@@ -17,6 +17,24 @@ import { InventoryPanel } from './components/InventoryPanel';
 import { retroAudio } from './game/AudioSynth';
 import { DistrictRealm } from './game/iso/IsoTiles';
 import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { gameGate } from './game/gate/GameGate';
+import { GameServerInfo, SavedServer } from './game/gate/types';
+import { onlineGate, savedToInfo } from './net/OnlineGate';
+import { MainMenu } from './components/menu/MainMenu';
+import { GateChooser } from './components/menu/GateChooser';
+import { OfflineLoad } from './components/menu/OfflineLoad';
+import { LoginPanel } from './components/menu/LoginPanel';
+import { MultiplayerMenu } from './components/menu/MultiplayerMenu';
+import { ServerBrowser } from './components/menu/ServerBrowser';
+import { AddServerForm } from './components/menu/AddServerForm';
+import { DirectConnectForm } from './components/menu/DirectConnectForm';
+import { CreateServerForm } from './components/menu/CreateServerForm';
+import { ConnectingOverlay } from './components/menu/ConnectingOverlay';
+import { ConnectionLost } from './components/menu/ConnectionLost';
+import { SettingsPopup } from './components/settings/SettingsPopup';
+import { ServerAdminPopup } from './components/admin/ServerAdminPopup';
+import { SocialPopup } from './components/social/SocialPopup';
+import { bpvApi } from './api/BpvApiClient';
 
 const STARTER_CARDS: FishCardData[] = [
   {
@@ -170,6 +188,30 @@ export const App: React.FC = () => {
   ]);
   const [worldClock, setWorldClock] = useState({ dayStr: 'DAY 1', timeStr: '08:00', weatherIcon: '☀️' });
   const talkedNpcs = useRef(new Set<string>());
+  const [, setGateTick] = useState(0);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [socialKind, setSocialKind] = useState<'friends' | 'party' | 'guild' | null>(null);
+  const gate = gameGate.snapshot();
+
+  useEffect(() => {
+    const unsub = gameGate.subscribe(() => setGateTick(n => n + 1));
+    gameGate.boot();
+    retroAudio.startMenuTheme();
+    return () => {
+      unsub();
+      retroAudio.stopMenuTheme();
+    };
+  }, []);
+
+  useEffect(() => {
+    retroAudio.setMuted(gate.settings.mute);
+  }, [gate.settings.mute]);
+
+  useEffect(() => {
+    if (gate.phase === 'main_menu') retroAudio.startMenuTheme();
+    else retroAudio.stopMenuTheme();
+  }, [gate.phase]);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -217,6 +259,7 @@ export const App: React.FC = () => {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.code === 'Escape') {
+        if (gameGate.phase !== 'playing') return;
         if (activeTab !== 'PLAY') {
           setActiveTab('PLAY');
         } else {
@@ -226,20 +269,27 @@ export const App: React.FC = () => {
       }
       if (e.code === 'KeyI' || e.code === 'Tab') {
         if (e.code === 'Tab') e.preventDefault();
-        if (activeTab === 'PLAY' && !menuOpen) setInventoryOpen(v => !v);
+        if (gameGate.phase === 'playing' && activeTab === 'PLAY' && !menuOpen) setInventoryOpen(v => !v);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [activeTab, menuOpen]);
 
-  const handleUpgradeCard = (cardId: number) => {
+  const handleUpgradeCard = async (cardId: number) => {
     const card = cards.find(c => c.id === cardId);
     if (!card) return;
     const cost = card.level * 100;
-    if (player.coins < cost) return;
+    if (gate.mode === 'online') {
+      const r: any = await onlineGate.action('spend_coins', { amount: cost });
+      if (!r.ok || !r.session) return;
+      gameGate.patchCharacter({ coins: r.session.coins });
+    } else {
+      const coins = livePlayer.coins;
+      if (coins < cost) return;
+      gameGate.persistOffline({ coins: coins - cost });
+    }
     retroAudio.playItemPickup();
-    setPlayer(p => ({ ...p, coins: p.coins - cost }));
     setCards(prev =>
       prev.map(c =>
         c.id === cardId
@@ -249,11 +299,20 @@ export const App: React.FC = () => {
     );
   };
 
-  const handleClaimMission = (missionId: number) => {
+  const handleClaimMission = async (missionId: number) => {
     const mission = missions.find(m => m.id === missionId);
     if (!mission || mission.is_completed) return;
+    if (gate.mode === 'online') {
+      const r: any = await onlineGate.action('complete_quest', { questId: mission.mission_key });
+      if (!r.ok || !r.session) return;
+      gameGate.patchCharacter({ coins: r.session.coins, xp: r.session.xp, level: r.session.level });
+    } else {
+      gameGate.persistOffline({
+        coins: livePlayer.coins + mission.reward_coins,
+        xp: livePlayer.xp + mission.reward_xp
+      });
+    }
     retroAudio.playQuestComplete();
-    setPlayer(p => ({ ...p, coins: p.coins + mission.reward_coins, xp: p.xp + mission.reward_xp }));
     setMissions(prev => prev.map(m => (m.id === missionId ? { ...m, is_completed: true } : m)));
   };
 
@@ -311,30 +370,299 @@ export const App: React.FC = () => {
     setCurrentDistrict(labels[next]);
   };
 
-  const avatar = {
-    username: player.username,
-    skin: player.avatar_skin,
-    hair: player.avatar_hair,
-    shirt: player.avatar_shirt,
-    pants: player.avatar_pants
+  const playingWorld = gate.phase === 'playing' && activeTab === 'PLAY';
+  const inShell = gate.phase !== 'exited';
+  const netMode = playingWorld ? (gate.mode === 'online' ? 'online' : 'offline') : 'preview';
+
+  const livePlayer = {
+    ...player,
+    username:
+      gate.mode === 'online' ? gate.character?.username ?? player.username : gate.offlineProfile?.username ?? player.username,
+    coins: gate.mode === 'online' ? gate.character?.coins ?? player.coins : gate.offlineProfile?.coins ?? player.coins,
+    level: gate.mode === 'online' ? gate.character?.level ?? player.level : gate.offlineProfile?.level ?? player.level,
+    xp: gate.mode === 'online' ? gate.character?.xp ?? player.xp : gate.offlineProfile?.xp ?? player.xp,
+    avatar_skin: gate.character?.avatar_skin ?? gate.offlineProfile?.avatar_skin ?? player.avatar_skin,
+    avatar_hair: gate.character?.avatar_hair ?? gate.offlineProfile?.avatar_hair ?? player.avatar_hair,
+    avatar_shirt: gate.character?.avatar_shirt ?? gate.offlineProfile?.avatar_shirt ?? player.avatar_shirt,
+    avatar_pants: gate.character?.avatar_pants ?? gate.offlineProfile?.avatar_pants ?? player.avatar_pants
   };
 
-  const playing = activeTab === 'PLAY';
+  const avatar = {
+    username: livePlayer.username,
+    skin: livePlayer.avatar_skin,
+    hair: livePlayer.avatar_hair,
+    shirt: livePlayer.avatar_shirt,
+    pants: livePlayer.avatar_pants
+  };
+
+  const refreshServers = async () => {
+    const discovered = await onlineGate.discover();
+    const saved = gate.savedServers.map(s => savedToInfo(s, { status: 'unknown' }));
+    const merged = [...discovered];
+    for (const s of saved) {
+      if (!merged.some(m => m.address === s.address && m.port === s.port)) merged.push(s);
+    }
+    const pinged = await Promise.all(merged.map(s => onlineGate.pingServer(s)));
+    gameGate.setDirectory(pinged);
+  };
+
+  const connectTo = async (server: GameServerInfo, password?: string) => {
+    gameGate.selectServer(server);
+    gameGate.beginConnect(server);
+    const result = await onlineGate.connect(server, {
+      username: livePlayer.username,
+      token: bpvApi.token,
+      password,
+      avatar: { skin: avatar.skin, hair: avatar.hair, shirt: avatar.shirt, pants: avatar.pants },
+      onStep: i => gameGate.advanceConnect(i)
+    });
+    if (result.ok) gameGate.finishConnect(result.character, result.pingMs);
+    else gameGate.failConnect(result.reason);
+  };
+
+  useEffect(() => {
+    if (gate.phase === 'server_select') void refreshServers();
+  }, [gate.phase]);
+
+  useEffect(() => {
+    if (!playingWorld || gate.mode !== 'online') return;
+    const id = setInterval(() => {
+      const pose = earthRef.current?.getPose();
+      if (pose && onlineGate.sessionId) {
+        void onlineGate.action('move', { ...pose, district: realm });
+        void onlineGate.snapshot().then(snap => {
+          if (!snap && onlineGate.lostConnection()) {
+            gameGate.failConnect('Connection lost');
+          }
+        });
+      }
+    }, 800);
+    return () => clearInterval(id);
+  }, [playingWorld, gate.mode, realm]);
+
+  const reconnectAttempt = useRef(0);
+  useEffect(() => {
+    if (gate.phase !== 'connection_lost' || !gate.settings.autoReconnect || !gate.selectedServer) return;
+    if (reconnectAttempt.current >= 2) return;
+    reconnectAttempt.current += 1;
+    const t = setTimeout(() => {
+      if (gate.selectedServer) void connectTo(gate.selectedServer);
+    }, 1600);
+    return () => clearTimeout(t);
+  }, [gate.phase]);
+
+  useEffect(() => {
+    if (gate.phase === 'playing') reconnectAttempt.current = 0;
+  }, [gate.phase]);
+
+  const playing = playingWorld;
 
   return (
     <div className="game-root">
-      <IsoEarthView
-        ref={earthRef}
-        avatar={avatar}
-        visible={playing}
-        onDistrictChange={onDistrictChange}
-        onNpcTalked={onNpcTalked}
+      {inShell ? (
+        <IsoEarthView
+          ref={earthRef}
+          avatar={avatar}
+          visible
+          netMode={netMode}
+          interactive={playingWorld}
+          onDistrictChange={onDistrictChange}
+          onNpcTalked={onNpcTalked}
+        />
+      ) : null}
+
+      {gate.phase === 'main_menu' ? (
+        <MainMenu
+          hasSave={gate.hasLocalSave}
+          onPlay={() => gameGate.openGate()}
+          onOnline={() => gameGate.chooseOnline()}
+          onOffline={() => gameGate.chooseOffline()}
+          onServers={() => gameGate.openMultiplayer()}
+          onSettings={() => setSettingsOpen(true)}
+          onExit={() => gameGate.exitGame()}
+        />
+      ) : null}
+
+      <GateChooser
+        open={gate.phase === 'gate'}
+        onOffline={() => gameGate.chooseOffline()}
+        onOnline={() => gameGate.chooseOnline()}
+        onServers={() => gameGate.openMultiplayer()}
+        onBack={() => gameGate.boot()}
       />
+      <OfflineLoad
+        open={gate.phase === 'offline_load'}
+        onEnter={() => {
+          gameGate.persistOffline({
+            username: player.username,
+            coins: player.coins,
+            level: player.level,
+            xp: player.xp,
+            avatar_skin: player.avatar_skin,
+            avatar_hair: player.avatar_hair,
+            avatar_shirt: player.avatar_shirt,
+            avatar_pants: player.avatar_pants
+          });
+          gameGate.confirmOfflineWorld();
+        }}
+        onBack={() => gameGate.boot()}
+      />
+      <LoginPanel
+        open={gate.phase === 'auth'}
+        defaultName={player.username}
+        onBack={() => gameGate.boot()}
+        onSkip={() => gameGate.openServerSelect()}
+        onAuthed={(token, username) => {
+          gameGate.authenticated(token || 'guest', {
+            id: username,
+            username,
+            level: player.level,
+            xp: player.xp,
+            coins: player.coins,
+            avatar_skin: player.avatar_skin,
+            avatar_hair: player.avatar_hair,
+            avatar_shirt: player.avatar_shirt,
+            avatar_pants: player.avatar_pants,
+            col: 0,
+            row: 0,
+            district: 'city_center',
+            role: 'player',
+            reputation: 50
+          });
+        }}
+      />
+      <MultiplayerMenu
+        open={gate.phase === 'multiplayer_menu'}
+        onJoin={() => {
+          gameGate.openServerSelect();
+          void refreshServers();
+        }}
+        onCreate={() => gameGate.openCreateServer()}
+        onMine={() => gameGate.openServerSelect()}
+        onDirect={() => gameGate.openDirectConnect()}
+        onBack={() => gameGate.boot()}
+      />
+      <ServerBrowser
+        open={gate.phase === 'server_select'}
+        servers={gate.directory}
+        selectedId={gate.selectedServer?.id}
+        onRefresh={() => void refreshServers()}
+        onSelect={s => gameGate.selectServer(s)}
+        onJoin={() => gate.selectedServer && void connectTo(gate.selectedServer)}
+        onAdd={() => gameGate.openAddServer()}
+        onDirect={() => gameGate.openDirectConnect()}
+        onCreate={() => gameGate.openCreateServer()}
+        onBack={() => gameGate.openMultiplayer()}
+      />
+      <AddServerForm
+        open={gate.phase === 'add_server'}
+        onBack={() => gameGate.openServerSelect()}
+        onSave={(s: SavedServer) => {
+          gameGate.addSavedServer(s);
+          gameGate.openServerSelect();
+          void refreshServers();
+        }}
+      />
+      <DirectConnectForm
+        open={gate.phase === 'direct_connect'}
+        onBack={() => gameGate.openServerSelect()}
+        onConnect={(address, port, password) => {
+          void connectTo(
+            {
+              id: `direct_${address}_${port}`,
+              name: `${address}:${port}`,
+              address,
+              port,
+              protocol: 'http',
+              kind: 'direct',
+              players: 0,
+              maxPlayers: 50,
+              pingMs: null,
+              status: 'unknown',
+              passwordProtected: Boolean(password),
+              pvp: false,
+              pve: true,
+              npcAi: true
+            },
+            password
+          );
+        }}
+      />
+      <CreateServerForm
+        open={gate.phase === 'create_server'}
+        onBack={() => gameGate.openMultiplayer()}
+        onCreated={(name, address, port, password) => {
+          gameGate.addSavedServer({
+            id: `host_${address}_${port}`,
+            name,
+            address,
+            port,
+            protocol: 'http',
+            password,
+            kind: 'self_hosted'
+          });
+          gameGate.openServerSelect();
+          void refreshServers();
+        }}
+      />
+      <ConnectingOverlay
+        progress={
+          ['connect', 'load_player', 'load_world', 'sync'].includes(gate.phase) ? gate.progress : null
+        }
+        serverName={gate.selectedServer?.name}
+      />
+      <ConnectionLost
+        open={gate.phase === 'connection_lost'}
+        failure={gate.failure}
+        onRetry={() => gate.selectedServer && void connectTo(gate.selectedServer)}
+        onServers={() => gameGate.openServerSelect()}
+        onOffline={() => gameGate.chooseOffline()}
+        onMenu={() => {
+          void onlineGate.leave();
+          gameGate.boot();
+        }}
+      />
+
+      <SettingsPopup
+        open={settingsOpen}
+        settings={gate.settings}
+        mode={gate.mode}
+        connected={gate.mode === 'online' && playingWorld}
+        pingMs={gate.pingMs}
+        serverName={gate.connectedServerName}
+        role={gate.role}
+        onChange={p => gameGate.applySettings(p)}
+        onRequestMode={m => {
+          const r = gameGate.requestModeSwitch(m);
+          if (!r.ok) return;
+          setSettingsOpen(false);
+        }}
+        onLeaveServer={() => {
+          void onlineGate.leave();
+          gameGate.leaveServer();
+          setSettingsOpen(false);
+        }}
+        onClose={() => setSettingsOpen(false)}
+      />
+      <ServerAdminPopup open={adminOpen} onClose={() => setAdminOpen(false)} />
+      <SocialPopup kind={socialKind} onClose={() => setSocialKind(null)} />
+
+      {gate.phase === 'exited' ? (
+        <div className="main-menu">
+          <div className="main-menu-card">
+            <h1 className="main-menu-logo">BPV</h1>
+            <p>Thanks for playing.</p>
+            <button type="button" className="main-menu-play" onClick={() => gameGate.boot()}>
+              Return
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {playing && (
         <>
           <GameHUD
-            player={player}
+            player={livePlayer}
             district={String(currentDistrict)}
             isOutdoor={isOutdoorMode}
             metersWalked={totalMeters}
@@ -346,13 +674,40 @@ export const App: React.FC = () => {
             worldClock={worldClock}
           />
 
-          <InventoryPanel open={inventoryOpen} onClose={() => setInventoryOpen(false)} gold={player.coins} />
+          <InventoryPanel open={inventoryOpen} onClose={() => setInventoryOpen(false)} gold={livePlayer.coins} />
 
           <PauseMenu
             open={menuOpen}
             onClose={() => setMenuOpen(false)}
-            playerName={player.username}
+            playerName={livePlayer.username}
             currentRealm={realm}
+            online={gate.mode === 'online'}
+            canAdmin={gate.role === 'owner' || gate.role === 'admin' || gate.role === 'moderator'}
+            onSettings={() => {
+              setMenuOpen(false);
+              setSettingsOpen(true);
+            }}
+            onMainMenu={() => {
+              setMenuOpen(false);
+              if (gate.mode === 'online') void onlineGate.leave();
+              if (gate.mode === 'offline') {
+                gameGate.persistOffline({
+                  username: livePlayer.username,
+                  coins: livePlayer.coins,
+                  level: livePlayer.level,
+                  xp: livePlayer.xp
+                });
+              }
+              gameGate.backToMenu();
+            }}
+            onAdmin={() => {
+              setMenuOpen(false);
+              setAdminOpen(true);
+            }}
+            onSocial={k => {
+              setMenuOpen(false);
+              setSocialKind(k);
+            }}
             onDistrict={r => earthRef.current?.loadDistrict(r)}
             onNavigate={tab => {
               setMenuOpen(false);
@@ -403,7 +758,7 @@ export const App: React.FC = () => {
         </>
       )}
 
-      {!playing && (
+      {!playing && gate.phase === 'playing' && (
         <div className="dex-overlay">
           <button
             type="button"
@@ -422,7 +777,7 @@ export const App: React.FC = () => {
               <p>Collectible holographic cards — tournament loot & IsoEarth drops.</p>
               <div className="dex-cards">
                 {cards.map(c => (
-                  <FishCardView key={c.id} card={c} onUpgrade={handleUpgradeCard} playerCoins={player.coins} />
+                  <FishCardView key={c.id} card={c} onUpgrade={handleUpgradeCard} playerCoins={livePlayer.coins} />
                 ))}
               </div>
             </div>

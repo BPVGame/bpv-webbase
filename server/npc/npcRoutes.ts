@@ -77,3 +77,42 @@ npcRouter.get('/state/:userKey', async (req, res) => {
   if (memoryStore.has(key)) return res.json({ state: memoryStore.get(key) });
   res.status(404).json({ error: 'not_found' });
 });
+
+type PlayerChatMsg = { from: string; to: string; text: string; emotion: string; at: number };
+const playerRooms = new Map<string, PlayerChatMsg[]>();
+const playerChatRate = new Map<string, number[]>();
+
+function chatRoomKey(a: string, b: string) {
+  return [a, b].map(s => s.slice(0, 32)).sort().join('|');
+}
+
+npcRouter.post('/player-chat', (req, res) => {
+  const from = String(req.body?.from || '').slice(0, 32);
+  const to = String(req.body?.to || '').slice(0, 32);
+  const text = String(req.body?.text || '').trim().slice(0, 240);
+  const emotion = String(req.body?.emotion || 'neutral').slice(0, 24);
+  if (!from || !to || !text) return res.status(400).json({ error: 'from, to, text required' });
+  if (from === to) return res.status(400).json({ error: 'cannot_chat_self' });
+
+  const now = Date.now();
+  const hits = (playerChatRate.get(from) ?? []).filter(t => now - t < 10_000);
+  if (hits.length >= 8) return res.status(429).json({ error: 'slow_down' });
+  hits.push(now);
+  playerChatRate.set(from, hits);
+
+  const msg: PlayerChatMsg = { from, to, text, emotion, at: now };
+  const key = chatRoomKey(from, to);
+  const list = playerRooms.get(key) ?? [];
+  list.push(msg);
+  if (list.length > 40) list.splice(0, list.length - 40);
+  playerRooms.set(key, list);
+  res.json({ ok: true, echo: msg });
+});
+
+npcRouter.get('/player-chat', (req, res) => {
+  const a = String(req.query.a || '').slice(0, 32);
+  const b = String(req.query.b || '').slice(0, 32);
+  if (!a || !b) return res.status(400).json({ error: 'a and b required' });
+  const list = playerRooms.get(chatRoomKey(a, b)) ?? [];
+  res.json({ ok: true, messages: list });
+});

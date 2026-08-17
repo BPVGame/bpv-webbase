@@ -21,12 +21,16 @@ import { simulateNpcMeeting } from './simulation/npcToNpc';
 import { buildDecisionPrompt, buildDialoguePrompt } from './ai/prompts';
 import { requestNpcAi } from './ai/chatBaseClient';
 import { executeTool, registerDefaultTools, ToolContext } from './tools/registry';
-import { applyRelationshipDelta, applyPlayerAction, getOrCreateRelationship } from './relationships';
-import { rememberInteraction, decayMemories } from './memory';
+import { applyRelationshipDelta, applyPlayerAction } from './relationships';
+import { decayMemories } from './memory';
 import { createNeedQuest, earnWage, spendOnFood, buyItem } from './economy';
 import { applyEmotionDelta, moodFromEmotions } from './personality';
 import { saveNpcState, loadNpcState, clearNpcState } from './persistence/localStore';
 import { CHUNK_SIZE } from '../iso/WorldGen';
+import { DialogueRuntime } from './dialogue/runtime';
+import { collectWorldFacts, formatFactsForPrompt } from './dialogue/worldFacts';
+import type { RpgDialogueScene } from './dialogue/types';
+import type { NpcAppearance } from './types';
 
 export interface NpcVisual {
   id: string;
@@ -39,6 +43,8 @@ export interface NpcVisual {
   pants: string;
   activity: string;
   mood: string;
+  bubble?: string;
+  talking?: boolean;
 }
 
 export interface DialogueState {
@@ -64,6 +70,13 @@ export class NpcDirector {
   };
 
   dialogue: DialogueState | null = null;
+  dialogueRt!: DialogueRuntime;
+  playerAppearance: NpcAppearance = {
+    skin: '#f3d5b5',
+    hair: '#3d2914',
+    shirt: '#3a5a8c',
+    pants: '#2c3e50'
+  };
   debugSelectedId: string | null = null;
   lastAiMeta: Map<string, AiCallMeta> = new Map();
   log: string[] = [];
@@ -78,6 +91,7 @@ export class NpcDirector {
 
   constructor() {
     registerDefaultTools();
+    this.dialogueRt = new DialogueRuntime(this);
   }
 
   setWalkableChecker(fn: (x: number, y: number) => boolean) {
@@ -92,7 +106,10 @@ export class NpcDirector {
       this.clock.state = saved.clock;
       this.events.events = saved.events ?? [];
       this.quests = saved.quests ?? [];
-      for (const n of saved.npcs) this.npcs.set(n.id, n);
+      for (const n of saved.npcs) {
+        if (!n.aiTier) n.aiTier = n.occupation === 'farmer' ? 'background' : 'normal';
+        this.npcs.set(n.id, n);
+      }
       if (saved.player?.coins != null) this.player.coins = saved.player.coins;
       this.pushLog('Restored persistent NPC world');
     } else {
@@ -118,6 +135,7 @@ export class NpcDirector {
     this.quests = [];
     this.events.events = [];
     this.dialogue = null;
+    this.dialogueRt.endScene();
     this.clock = new WorldClock({ timeScale: 0.85 });
     this.boot(this.player.username);
   }
@@ -130,6 +148,11 @@ export class NpcDirector {
     this.player.worldX = x;
     this.player.worldY = y;
     if (coins != null) this.player.coins = coins;
+  }
+
+  setPlayerAppearance(appearance: NpcAppearance, username?: string) {
+    this.playerAppearance = appearance;
+    if (username) this.player.username = username;
   }
 
   getVisuals(): NpcVisual[] {
@@ -145,8 +168,31 @@ export class NpcDirector {
         shirt: n.appearance.shirt,
         pants: n.appearance.pants,
         activity: n.currentActivity,
-        mood: n.currentMood
+        mood: n.currentMood,
+        talking: n.currentActivity === 'talking',
+        bubble: this.dialogueRt.bubbles.find(b => b.actorId === n.id)?.text
       }));
+  }
+
+  /** Online: reconcile important NPC poses from the dedicated server snapshot. */
+  applyServerNpcs(
+    list: Array<{
+      id: string;
+      col: number;
+      row: number;
+      activity?: string;
+      mood?: string;
+      talkingTo?: string | null;
+    }>
+  ) {
+    for (const s of list) {
+      const n = this.npcs.get(s.id);
+      if (!n) continue;
+      n.currentLocation = posFromWorld(s.col, s.row, CHUNK_SIZE);
+      if (s.talkingTo) n.currentActivity = 'talking';
+      else if (s.activity) n.currentActivity = s.activity;
+      if (s.mood) n.currentMood = s.mood;
+    }
   }
 
   nearbyInteractable(range = 2): LivingNpc | null {
@@ -241,6 +287,8 @@ export class NpcDirector {
       this.saveAcc = 0;
       this.persist();
     }
+
+    this.dialogueRt.tick(Date.now());
   }
 
   private atPlace(npc: LivingNpc, key: string): boolean {
@@ -253,7 +301,12 @@ export class NpcDirector {
     const planned = planIntention(npc, this.clock.state, relevant, this.player);
     npc.currentIntention = planned.intention;
 
-    if (planned.escalateToAi && npc.simLod === 'full' && this.budget.canCall(npc, Date.now())) {
+    if (
+      planned.escalateToAi &&
+      npc.aiTier !== 'background' &&
+      npc.simLod === 'full' &&
+      this.budget.canCall(npc, Date.now())
+    ) {
       void this.budget.schedule(npc.id, aiPriority(npc, this.player, false), async () => {
         await this.callAiDecision(npc, planned.reason);
       });
@@ -380,6 +433,7 @@ export class NpcDirector {
   }
 
   private stepMovement(npc: LivingNpc) {
+    if (npc.currentActivity === 'talking') return;
     if (!npc.path.length) return;
     const next = npc.path[0];
     if (!this.isWalkable(next.x, next.y)) {
@@ -391,25 +445,80 @@ export class NpcDirector {
   }
 
   private runNearbyMeetings() {
+    if (this.dialogueRt.ambient || this.dialogueRt.scene) return;
     const list = [...this.npcs.values()].filter(n => n.simLod === 'full' || n.simLod === 'reduced');
     for (let i = 0; i < list.length; i++) {
       for (let j = i + 1; j < list.length; j++) {
         const result = simulateNpcMeeting(list[i], list[j], this.worldNow());
         if (result.type !== 'none' && result.type !== 'pass') {
-          this.pushLog(result.summary);
+          this.dialogueRt.handleMeeting(list[i], list[j], result);
+          return;
         }
       }
     }
   }
 
-  async startDialogue(npcId?: string): Promise<DialogueState | null> {
-    const npc = npcId ? this.npcs.get(npcId) : this.nearbyInteractable();
-    if (!npc) return null;
-    this.debugSelectedId = npc.id;
-    getOrCreateRelationship(npc, 'player', 'player');
+  sceneToLegacy(scene: RpgDialogueScene | null): DialogueState | null {
+    if (!scene) return null;
+    const npc = scene.speakers.find(s => s.kind === 'npc');
+    const line = scene.lines[scene.lineIndex];
+    return {
+      npcId: npc?.id ?? scene.speakers[0]?.id ?? '',
+      npcName: npc?.name ?? 'Someone',
+      emotion: line?.emotion,
+      lines: scene.lines.map(l => ({
+        role: l.speakerId === 'player' ? 'player' : 'npc',
+        text: l.text
+      }))
+    };
+  }
 
+  beginTalk(npcId?: string): RpgDialogueScene | null {
+    const id = npcId ?? this.nearbyInteractable()?.id;
+    if (!id) return null;
+    this.debugSelectedId = id;
+    const scene = this.dialogueRt.beginNpcTalk(id);
+    this.dialogue = this.sceneToLegacy(scene);
+    return scene;
+  }
+
+  listenIn(): RpgDialogueScene | null {
+    const scene = this.dialogueRt.openOverhear(false);
+    this.dialogue = this.sceneToLegacy(scene);
+    return scene;
+  }
+
+  chooseDialogue(choiceId: string): RpgDialogueScene | null {
+    const scene = this.dialogueRt.choose(choiceId);
+    this.dialogue = this.sceneToLegacy(scene);
+    return scene;
+  }
+
+  advanceDialogue(): RpgDialogueScene | null {
+    const scene = this.dialogueRt.advanceLine();
+    this.dialogue = this.sceneToLegacy(scene);
+    return scene;
+  }
+
+  async startDialogue(npcId?: string): Promise<DialogueState | null> {
+    return this.sceneToLegacy(this.beginTalk(npcId));
+  }
+
+  async replyDialogue(playerText: string): Promise<DialogueState | null> {
+    const scene = await this.dialogueRt.replyFreeform(playerText);
+    this.dialogue = this.sceneToLegacy(scene);
+    return this.dialogue;
+  }
+
+  async requestAiDialogue(
+    npc: LivingNpc,
+    history: Array<{ role: string; content: string }>,
+    playerMessage: string
+  ): Promise<StructuredAiDecision> {
     const relevant = this.events.relevantTo(npc, this.worldNow());
-    const prompt = buildDialoguePrompt(npc, this.clock.state, relevant, this.player, [], 'Hello!');
+    const facts = collectWorldFacts(npc, this.clock.state, this.events.events, this.quests, this.npcs);
+    const prompt = buildDialoguePrompt(npc, this.clock.state, relevant, this.player, history, playerMessage);
+    prompt.user += `\nVerified world facts (do not contradict):\n${formatFactsForPrompt(facts)}`;
     const result = await requestNpcAi({
       kind: 'dialogue',
       system: prompt.system,
@@ -427,88 +536,11 @@ export class NpcDirector {
       error: result.error,
       decision: result.decision
     });
-
-    const line = result.decision.dialogue || `${npc.name} nods quietly.`;
-    if (result.decision.relationship_change) {
-      applyRelationshipDelta(npc, 'player', result.decision.relationship_change, 'Dialogue', this.worldNow(), 'player');
-    } else {
-      applyPlayerAction(npc, 'talk_friendly', this.worldNow());
-    }
-    rememberInteraction(npc, {
-      event: 'conversation',
-      description: `Spoke with player: ${line.slice(0, 80)}`,
-      importance: 35,
-      emotion: result.decision.emotion || 'neutral',
-      timestamp: this.worldNow(),
-      location: { x: npc.currentLocation.worldX, y: npc.currentLocation.worldY }
-    });
-
-    this.dialogue = {
-      npcId: npc.id,
-      npcName: npc.name,
-      emotion: result.decision.emotion || npc.currentMood,
-      lines: [{ role: 'npc', text: line }]
-    };
-    this.pushLog(`Dialogue with ${npc.name} (${result.source})`);
-    return this.dialogue;
-  }
-
-  async replyDialogue(playerText: string): Promise<DialogueState | null> {
-    if (!this.dialogue) return null;
-    const npc = this.npcs.get(this.dialogue.npcId);
-    if (!npc) return null;
-    this.dialogue.lines.push({ role: 'player', text: playerText });
-
-    const history = this.dialogue.lines.map(l => ({
-      role: l.role === 'player' ? 'user' : 'assistant',
-      content: l.text
-    }));
-    const relevant = this.events.relevantTo(npc, this.worldNow());
-    const prompt = buildDialoguePrompt(npc, this.clock.state, relevant, this.player, history, playerText);
-    const result = await requestNpcAi({
-      kind: 'dialogue',
-      system: prompt.system,
-      user: prompt.user,
-      npc,
-      player: this.player
-    });
-    npc.lastAiCallAt = Date.now();
-    npc.lastAiLatencyMs = result.latencyMs;
-    this.lastAiMeta.set(npc.id, {
-      at: Date.now(),
-      latencyMs: result.latencyMs,
-      ok: result.ok,
-      error: result.error,
-      decision: result.decision
-    });
-
-    const line = result.decision.dialogue || '…';
-    this.dialogue.lines.push({ role: 'npc', text: line });
-    this.dialogue.emotion = result.decision.emotion || this.dialogue.emotion;
-    if (result.decision.relationship_change) {
-      applyRelationshipDelta(npc, 'player', result.decision.relationship_change, playerText.slice(0, 40), this.worldNow(), 'player');
-    }
-
-    // Offer quest if player asks for help and NPC has need quest
-    if (/help|quest|dog|lost/i.test(playerText)) {
-      let q = this.quests.find(q => q.giverId === npc.id && q.status === 'available');
-      if (!q) {
-        q = createNeedQuest(npc, this.worldNow()) ?? undefined;
-        if (q) this.quests.push(q);
-      }
-      if (q) {
-        q.status = 'active';
-        this.dialogue.lines.push({
-          role: 'npc',
-          text: `Quest: ${q.title} — ${q.description} (Reward: ${q.rewardCoins} coins)`
-        });
-      }
-    }
-
-    return this.dialogue;
+    return result.decision;
   }
 
   endDialogue() {
+    this.dialogueRt.endScene();
     this.dialogue = null;
   }
 
@@ -577,7 +609,7 @@ export class NpcDirector {
     });
   }
 
-  private pushLog(msg: string) {
+  pushLog(msg: string) {
     this.log.unshift(`${new Date().toISOString().slice(11, 19)} ${msg}`);
     if (this.log.length > 50) this.log.length = 50;
   }

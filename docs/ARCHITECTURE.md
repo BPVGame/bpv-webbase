@@ -66,9 +66,28 @@ Client: `src/api/BpvApiClient.ts` ↔ `ios/BPVGame/Sources/BpvApiClient.swift`
 
 Local server: `server/index.ts` (dev stand-in for bpvgame.com).
 
+## Game Gate & multiplayer
+
+The client no longer boots straight into the world. `GameGate` (`src/game/gate`) runs:
+
+BOOT → MAIN_MENU → OFFLINE (local save) **or** ONLINE (auth → server browser → dedicated shard).
+
+| Piece | Role |
+| --- | --- |
+| `src/game/gate` | Menu state machine, local profile, settings, saved servers |
+| `src/net/OnlineGate.ts` | Official / community / custom / direct connect |
+| `server/game` | Authoritative sessions, NPC snapshot, economy, admin roles |
+| `server.config.json` | Self-hosted shard name, port, max players, PvP, NPC AI, seed |
+
+Offline never starts `MultiplayerSync`. Online characters and coins live on the server; local saves are not mixed in. Session APIs (`join`, `snapshot`, `action`) target the selected shard (official, community, custom, or direct `host:port`). Snapshots require a valid session. Owner role is granted only to `owner_username` in `server.config.json` (or the first joiner if that field is empty).
+
+APIs: `GET /api/game/directory`, `POST /api/game/session/join`, `GET /api/game/snapshot`, `POST /api/game/action`, `GET /api/game/admin`.
+
+Host: `npm run game-server` (same process as `npm run server`). Listen port comes from `PORT` or `server.config.json` `server_port`.
+
 ## Multiplayer
 
-Foundation presence via REST heartbeat (`MultiplayerSync`). Scale path: Redis presence + WebSocket rooms per district.
+Presence heartbeat remains (`MultiplayerSync`). The dedicated shard is authoritative for movement bounds, coins, XP, quests, kicks/bans, and shared NPC poses. Scale path: Redis presence + WebSocket rooms per district.
 
 ## Outdoor mode
 

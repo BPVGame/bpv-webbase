@@ -3,9 +3,12 @@ import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import { initDatabase, pool } from './db.js';
 import { npcRouter } from './npc/npcRoutes.js';
+import { gameRouter } from './game/gameRoutes.js';
+import { loadDedicatedConfig } from './game/config.js';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const dedicated = loadDedicatedConfig();
+const PORT = process.env.PORT || dedicated.server_port || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'bpvgame_jwt_secret_2026';
 
 app.use(cors());
@@ -16,6 +19,7 @@ initDatabase();
 
 // Living AI NPC — Neuriy ChatBase / ElloFive proxy (server-authoritative)
 app.use('/api/npc', npcRouter);
+app.use('/api/game', gameRouter);
 // Middleware: Authenticate JWT Token
 const authenticate = (req: any, res: any, next: any) => {
   const authHeader = req.headers.authorization;
