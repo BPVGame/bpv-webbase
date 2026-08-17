@@ -2,27 +2,42 @@
 
 Full-screen cozy **16-bit RPG** foundation for **BPV Game**: real-world exploration, online multiplayer, tournaments, and collectible Fish Cards.
 
+**Live gallery (GitHub Pages):** [bpvgame.github.io/bpv-webbase](https://bpvgame.github.io/bpv-webbase/)
+
 ## Feel
 
 Classic 16-bit RPG + Real-world exploration + Online multiplayer + Tournaments + Collectible Fish Cards
 
 ## Gameplay preview
 
-<video src="docs/media/bpv-gameplay.mp4" controls width="100%" poster="docs/media/isoearth-world.png">
-  Your browser does not support the video tag. <a href="docs/media/bpv-gameplay.mp4">Download the playthrough</a>.
+<video src="https://bpvgame.github.io/bpv-webbase/media/bpv-gameplay.mp4" controls width="100%" poster="docs/media/main-menu.png">
+  Your browser does not support the video tag.
+  <a href="docs/media/bpv-gameplay.mp4">Download the playthrough</a>
 </video>
 
-[Download playthrough video (MP4)](docs/media/bpv-gameplay.mp4)
+[Watch on GitHub Pages](https://bpvgame.github.io/bpv-webbase/) · [Download MP4](docs/media/bpv-gameplay.mp4)
 
 ### Screenshots
 
-**Full-screen IsoEarth (City Center)**
+**Main menu** (live IsoEarth behind PLAY / ONLINE / OFFLINE / SERVERS)
+
+![BPV main menu](docs/media/main-menu.png)
+
+**Game Gate**
+
+![Game Gate](docs/media/game-gate.png)
+
+**IsoEarth City Center**
 
 ![IsoEarth City Center](docs/media/isoearth-world.png)
 
 **Central Park**
 
 ![IsoEarth Central Park](docs/media/isoearth-park.png)
+
+**Settings**
+
+![Settings](docs/media/settings.png)
 
 **Inventory bag (I / Tab)**
 
@@ -35,6 +50,14 @@ Classic 16-bit RPG + Real-world exploration + Online multiplayer + Tournaments +
 **Tournaments**
 
 ![BPV Tournaments](docs/media/tournaments.png)
+
+**Multiplayer**
+
+![Multiplayer menu](docs/media/multiplayer.png)
+
+**Server browser**
+
+![Server browser](docs/media/server-browser.png)
 
 ### Controls
 
@@ -77,8 +100,10 @@ Set `VITE_BPV_API_URL=http://localhost:3001` to point the client at the local se
 ### Capture README media
 
 ```bash
-npm run capture:demo
+npm run capture:demo   # writes docs/media/*.png and bpv-gameplay.mp4
 ```
+
+GitHub Pages publishes `docs/` (gallery + media) on every push to `main`.
 
 ## Docs
 

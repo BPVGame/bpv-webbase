@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BPV Game — Preview</title>
+    <style>
+      :root {
+        --ink: #2c2416;
+        --paper: #f5efe4;
+        --gold: #b89868;
+        --moss: #6a9a4e;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: Georgia, 'Times New Roman', serif;
+        background: #1a1610;
+        color: var(--paper);
+      }
+      header {
+        padding: 48px 24px 24px;
+        text-align: center;
+        background: radial-gradient(ellipse at top, #3a3224, #1a1610 70%);
+      }
+      h1 {
+        font-family: ui-monospace, monospace;
+        letter-spacing: 0.2em;
+        font-size: 42px;
+        margin: 0 0 8px;
+      }
+      .tag {
+        color: var(--gold);
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        font-size: 12px;
+      }
+      main {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 16px 20px 64px;
+      }
+      video,
+      img {
+        width: 100%;
+        border: 3px solid var(--gold);
+        border-radius: 14px;
+        background: #111;
+        display: block;
+      }
+      figure {
+        margin: 28px 0;
+      }
+      figcaption {
+        margin-top: 10px;
+        color: #d8c9a8;
+        font-size: 15px;
+      }
+      a {
+        color: var(--moss);
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <p class="tag">Battle Pixel V</p>
+      <h1>BPV</h1>
+      <p>Main menu · Game Gate · IsoEarth · Online servers</p>
+      <p><a href="https://github.com/BPVGame/bpv-webbase">GitHub repo</a></p>
+    </header>
+    <main>
+      <figure>
+        <video src="media/bpv-gameplay.mp4" controls poster="media/main-menu.png"></video>
+        <figcaption>Playthrough — launch, Game Gate, offline world, inventory, Dex, servers</figcaption>
+      </figure>
+      <figure>
+        <img src="media/main-menu.png" alt="BPV main menu over the live IsoEarth world" />
+        <figcaption>Main menu over the living IsoEarth world</figcaption>
+      </figure>
+      <figure>
+        <img src="media/game-gate.png" alt="Game Gate choosing Offline, Online, or Servers" />
+        <figcaption>Game Gate — Offline, Online, or Servers</figcaption>
+      </figure>
+      <figure>
+        <img src="media/isoearth-world.png" alt="IsoEarth City Center" />
+        <figcaption>IsoEarth City Center</figcaption>
+      </figure>
+      <figure>
+        <img src="media/isoearth-park.png" alt="Central Park" />
+        <figcaption>Central Park</figcaption>
+      </figure>
+      <figure>
+        <img src="media/inventory.png" alt="Inventory bag" />
+        <figcaption>Inventory bag</figcaption>
+      </figure>
+      <figure>
+        <img src="media/settings.png" alt="Settings popup" />
+        <figcaption>Settings popup</figcaption>
+      </figure>
+      <figure>
+        <img src="media/fish-cards.png" alt="Emoji Design Fish Cards" />
+        <figcaption>Emoji Design Fish Cards</figcaption>
+      </figure>
+      <figure>
+        <img src="media/tournaments.png" alt="Tournaments" />
+        <figcaption>Tournaments</figcaption>
+      </figure>
+      <figure>
+        <img src="media/multiplayer.png" alt="Multiplayer menu" />
+        <figcaption>Multiplayer — join, create, direct connect</figcaption>
+      </figure>
+      <figure>
+        <img src="media/server-browser.png" alt="Server browser" />
+        <figcaption>Server browser</figcaption>
+      </figure>
+    </main>
+  </body>
+</html>

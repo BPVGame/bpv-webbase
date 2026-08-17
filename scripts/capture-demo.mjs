@@ -1,12 +1,20 @@
 /**
- * Capture BPV Game screenshots + playthrough video for README.
+ * Capture BPV Game screenshots + playthrough video for README / GitHub Pages.
  */
 import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
+import { spawnSync } from 'child_process';
 
 const OUT = path.resolve('docs/media');
 fs.mkdirSync(OUT, { recursive: true });
+
+async function tap(page, key, hold = 180, gap = 110) {
+  await page.keyboard.down(key);
+  await page.waitForTimeout(hold);
+  await page.keyboard.up(key);
+  await page.waitForTimeout(gap);
+}
 
 const browser = await chromium.launch({
   headless: true,
@@ -21,105 +29,120 @@ const context = await browser.newContext({
 });
 
 const page = await context.newPage();
-page.on('dialog', async d => d.dismiss().catch(() => {}));
+page.on('dialog', d => {
+  void d.dismiss().catch(() => {});
+});
 
-await page.goto('http://localhost:3000/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+await page.goto('http://127.0.0.1:3000/', { waitUntil: 'domcontentloaded', timeout: 30000 });
 await page.waitForSelector('canvas', { timeout: 20000 });
-await page.waitForTimeout(2000);
+await page.getByRole('button', { name: 'PLAY' }).waitFor({ timeout: 15000 });
+await page.waitForTimeout(1600);
 
-// Dismiss any leftover overlays
-await page.keyboard.press('Escape').catch(() => {});
+await page.screenshot({ path: path.join(OUT, 'main-menu.png') });
 
-// --- WORLD / IsoEarth ---
-await page.waitForSelector('canvas.game-canvas, canvas', { timeout: 15000 });
-await page.waitForTimeout(1200);
+await page.getByRole('button', { name: 'PLAY' }).click();
+await page.waitForTimeout(500);
+await page.screenshot({ path: path.join(OUT, 'game-gate.png') });
 
-// Move around with WASD
+await page.getByRole('button', { name: /^Offline/ }).click();
+await page.waitForTimeout(450);
+await page.screenshot({ path: path.join(OUT, 'offline-load.png') });
+
+await page.getByRole('button', { name: /Load BPV World/i }).click();
+await page.waitForTimeout(1400);
+
 for (const key of ['KeyD', 'KeyD', 'KeyW', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyW']) {
-  await page.keyboard.down(key);
-  await page.waitForTimeout(180);
-  await page.keyboard.up(key);
-  await page.waitForTimeout(120);
+  await tap(page, key);
 }
-await page.waitForTimeout(400);
-await page.screenshot({ path: path.join(OUT, 'isoearth-world.png'), fullPage: false });
+await page.waitForTimeout(500);
+await page.screenshot({ path: path.join(OUT, 'isoearth-world.png') });
 
-// Open pause menu → Pixel Harbor
 await page.keyboard.press('Escape');
 await page.waitForTimeout(400);
 const harbor = page.getByRole('button', { name: /Pixel Harbor/i });
 if (await harbor.count()) {
   await harbor.click();
-  await page.waitForTimeout(1000);
-  await page.screenshot({ path: path.join(OUT, 'isoearth-harbor.png'), fullPage: false });
+  await page.waitForTimeout(1100);
+  await page.screenshot({ path: path.join(OUT, 'isoearth-harbor.png') });
 }
 
 await page.keyboard.press('Escape');
-await page.waitForTimeout(300);
+await page.waitForTimeout(350);
 const park = page.getByRole('button', { name: /Central Park/i });
 if (await park.count()) {
   await park.click();
-  await page.waitForTimeout(800);
+  await page.waitForTimeout(900);
 }
 for (const key of ['KeyA', 'KeyA', 'KeyS', 'KeyD']) {
-  await page.keyboard.down(key);
-  await page.waitForTimeout(160);
-  await page.keyboard.up(key);
+  await tap(page, key, 160);
 }
 await page.waitForTimeout(400);
-await page.screenshot({ path: path.join(OUT, 'isoearth-park.png'), fullPage: false });
+await page.screenshot({ path: path.join(OUT, 'isoearth-park.png') });
 
-// Inventory
 await page.keyboard.press('KeyI');
 await page.waitForTimeout(500);
-await page.screenshot({ path: path.join(OUT, 'inventory.png'), fullPage: false });
+await page.screenshot({ path: path.join(OUT, 'inventory.png') });
 await page.keyboard.press('KeyI');
-await page.waitForTimeout(300);
+await page.waitForTimeout(280);
 
-// --- FISH CARDS via pause menu ---
 await page.keyboard.press('Escape');
 await page.waitForTimeout(350);
+await page.getByRole('button', { name: /Settings/i }).click();
+await page.waitForTimeout(500);
+await page.screenshot({ path: path.join(OUT, 'settings.png') });
+const closer = page.getByRole('button', { name: 'Close' });
+if (await closer.count()) await closer.click();
+await page.waitForTimeout(280);
+if (!(await page.getByRole('button', { name: /Fish Cards/i }).count())) {
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+}
 await page.getByRole('button', { name: /Fish Cards/i }).click();
 await page.waitForSelector('text=Emoji Design Fish Cards', { timeout: 10000 });
 await page.waitForTimeout(700);
-await page.screenshot({ path: path.join(OUT, 'fish-cards.png'), fullPage: false });
+await page.screenshot({ path: path.join(OUT, 'fish-cards.png') });
 
-// --- TOURNAMENTS ---
 await page.getByRole('button', { name: /Back to World/i }).click();
 await page.waitForTimeout(400);
 await page.keyboard.press('Escape');
 await page.waitForTimeout(350);
 await page.getByRole('button', { name: /Tournaments/i }).click();
 await page.waitForTimeout(900);
-await page.screenshot({ path: path.join(OUT, 'tournaments.png'), fullPage: false });
+await page.screenshot({ path: path.join(OUT, 'tournaments.png') });
 
-// Back to world
 await page.getByRole('button', { name: /Back to World/i }).click();
-await page.waitForTimeout(500);
+await page.waitForTimeout(400);
 await page.keyboard.press('Escape');
 await page.waitForTimeout(300);
-const city = page.getByRole('button', { name: /City Center/i });
-if (await city.count()) await city.click();
+await page.getByRole('button', { name: /Main Menu/i }).click();
+await page.waitForTimeout(700);
+await page.getByRole('button', { name: 'SERVERS' }).click();
 await page.waitForTimeout(500);
-for (let i = 0; i < 8; i++) {
-  const keys = ['KeyW', 'KeyA', 'KeyS', 'KeyD'];
-  const k = keys[i % 4];
-  await page.keyboard.down(k);
-  await page.waitForTimeout(200);
-  await page.keyboard.up(k);
-  await page.waitForTimeout(100);
-}
-await page.waitForTimeout(600);
+await page.screenshot({ path: path.join(OUT, 'multiplayer.png') });
+
+await page.getByRole('button', { name: /Join Server/i }).click();
+await page.waitForTimeout(900);
+await page.screenshot({ path: path.join(OUT, 'server-browser.png') });
 
 const videoPath = await page.video()?.path();
 await context.close();
 await browser.close();
 
-// Rename video
 if (videoPath && fs.existsSync(videoPath)) {
-  const dest = path.join(OUT, 'bpv-gameplay.webm');
-  fs.renameSync(videoPath, dest);
-  console.log('VIDEO', dest);
+  const webm = path.join(OUT, 'bpv-gameplay.webm');
+  const mp4 = path.join(OUT, 'bpv-gameplay.mp4');
+  fs.renameSync(videoPath, webm);
+  const conv = spawnSync(
+    'ffmpeg',
+    ['-y', '-i', webm, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-an', mp4],
+    { stdio: 'inherit' }
+  );
+  if (conv.status === 0 && fs.existsSync(mp4)) {
+    fs.unlinkSync(webm);
+    console.log('VIDEO', mp4);
+  } else {
+    console.log('VIDEO_WEBM', webm);
+  }
 } else {
   console.log('NO_VIDEO');
 }
