@@ -6,6 +6,7 @@ interface Props {
   onPlay: () => void;
   onOnline: () => void;
   onOffline: () => void;
+  onSandbox: () => void;
   onServers: () => void;
   onSettings: () => void;
   onExit: () => void;
@@ -16,6 +17,7 @@ export const MainMenu: React.FC<Props> = ({
   onPlay,
   onOnline,
   onOffline,
+  onSandbox,
   onServers,
   onSettings,
   onExit
@@ -25,7 +27,7 @@ export const MainMenu: React.FC<Props> = ({
       <div className="main-menu-card">
         <p className="main-menu-kicker">Battle Pixel V</p>
         <h1 className="main-menu-logo">BPV</h1>
-        <p className="main-menu-tag">Living isometric world · Offline or Online</p>
+        <p className="main-menu-tag">Living isometric world · Offline, Online, or Sandbox</p>
         <div className="main-menu-actions">
           <button
             type="button"
@@ -42,6 +44,9 @@ export const MainMenu: React.FC<Props> = ({
           </button>
           <button type="button" onClick={() => { retroAudio.playClick(); onOffline(); }}>
             OFFLINE{hasSave ? ' · Continue' : ''}
+          </button>
+          <button type="button" onClick={() => { retroAudio.playClick(); onSandbox(); }}>
+            SANDBOX
           </button>
           <button type="button" onClick={() => { retroAudio.playClick(); onServers(); }}>
             SERVERS

@@ -7,12 +7,15 @@ import { RpgDialogueStage } from './RpgDialogueStage';
 import { NpcDebugPanel } from './NpcDebugPanel';
 import { onlineGate } from '../net/OnlineGate';
 import { StoryBanner } from '../game/npc/dialogue/types';
+import { sandboxVm } from '../game/sandbox';
 
 export interface IsoEarthViewHandle {
   loadDistrict: (realm: DistrictRealm) => void;
   setJoystick: (dir: { x: number; y: number }) => void;
   getWorldTime: () => ReturnType<typeof npcDirector.getWorldTime>;
   getPose: () => { col: number; row: number } | null;
+  tryJump: () => boolean;
+  syncSandbox: () => void;
 }
 
 interface IsoEarthViewProps {
@@ -29,10 +32,28 @@ interface IsoEarthViewProps {
   /** preview = menu background (no net). offline = local NPCs only. online = server snapshot + presence. */
   netMode?: 'preview' | 'offline' | 'online';
   interactive?: boolean;
+  sandboxMode?: boolean;
+  onOpenGovernment?: () => void;
+  onClaimLand?: (col: number, row: number) => void;
+  onPlantFlag?: (col: number, row: number) => void;
 }
 
 export const IsoEarthView = forwardRef<IsoEarthViewHandle, IsoEarthViewProps>(
-  ({ avatar, onDistrictChange, onNpcTalked, visible, netMode = 'offline', interactive = true }, ref) => {
+  (
+    {
+      avatar,
+      onDistrictChange,
+      onNpcTalked,
+      visible,
+      netMode = 'offline',
+      interactive = true,
+      sandboxMode = false,
+      onOpenGovernment,
+      onClaimLand,
+      onPlantFlag
+    },
+    ref
+  ) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const earthRef = useRef<IsoEarth | null>(null);
     const remotesRef = useRef<RemotePlayer[]>([]);
@@ -58,7 +79,9 @@ export const IsoEarthView = forwardRef<IsoEarthViewHandle, IsoEarthViewProps>(
       getPose: () => {
         const e = earthRef.current;
         return e ? { col: e.playerCol, row: e.playerRow } : null;
-      }
+      },
+      tryJump: () => earthRef.current?.tryJump() ?? false,
+      syncSandbox: () => earthRef.current?.syncSandboxOverlays()
     }));
 
     useEffect(() => {
@@ -122,6 +145,38 @@ export const IsoEarthView = forwardRef<IsoEarthViewHandle, IsoEarthViewProps>(
       earth.inputLocked = !interactive;
       earth.dialogueLocked = !interactive || dialogueOpen;
     }, [interactive, dialogueOpen]);
+
+    useEffect(() => {
+      const earth = earthRef.current;
+      if (!earth) return;
+      earth.sandboxEnabled = sandboxMode;
+      earth.syncSandboxOverlays();
+      if (!sandboxMode) return;
+      return sandboxVm.subscribe(() => earth.syncSandboxOverlays());
+    }, [sandboxMode]);
+
+    useEffect(() => {
+      if (!sandboxMode || !interactive) return;
+      const onKey = (e: KeyboardEvent) => {
+        if (dialogueOpen) return;
+        const earth = earthRef.current;
+        if (!earth) return;
+        if (e.code === 'KeyG') {
+          e.preventDefault();
+          onOpenGovernment?.();
+        }
+        if (e.code === 'KeyC') {
+          e.preventDefault();
+          onClaimLand?.(earth.playerCol, earth.playerRow);
+        }
+        if (e.code === 'KeyF') {
+          e.preventDefault();
+          onPlantFlag?.(earth.playerCol, earth.playerRow);
+        }
+      };
+      window.addEventListener('keydown', onKey);
+      return () => window.removeEventListener('keydown', onKey);
+    }, [sandboxMode, interactive, dialogueOpen, onOpenGovernment, onClaimLand, onPlantFlag]);
 
     useEffect(() => {
       if (netMode !== 'online') {

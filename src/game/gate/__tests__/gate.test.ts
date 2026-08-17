@@ -25,6 +25,19 @@ describe('GameGate', () => {
     assert.equal(g.sessionToken, null);
   });
 
+  it('enters sandbox without mixing online session state', () => {
+    const g = new GameGate();
+    g.boot();
+    g.chooseSandbox();
+    assert.equal(g.mode, 'sandbox');
+    assert.equal(g.phase, 'playing');
+    assert.equal(g.sessionToken, null);
+    g.mode = 'online';
+    g.phase = 'playing';
+    const r = g.requestModeSwitch('sandbox');
+    assert.equal(r.ok, false);
+  });
+
   it('refuses to mix online play into offline without leaving', () => {
     const g = new GameGate();
     g.boot();

@@ -18,6 +18,8 @@ interface PauseMenuProps {
   onMainMenu?: () => void;
   onAdmin?: () => void;
   onSocial?: (kind: 'friends' | 'party' | 'guild') => void;
+  sandbox?: boolean;
+  onGovernment?: () => void;
 }
 
 const NAV: Array<{ id: DexTab; label: string; icon: React.ReactNode }> = [
@@ -40,7 +42,9 @@ export const PauseMenu: React.FC<PauseMenuProps> = ({
   onSettings,
   onMainMenu,
   onAdmin,
-  onSocial
+  onSocial,
+  sandbox,
+  onGovernment
 }) => {
   if (!open) return null;
 
@@ -138,6 +142,17 @@ export const PauseMenu: React.FC<PauseMenuProps> = ({
           {canAdmin ? (
             <button type="button" onClick={() => onAdmin?.()}>
               Server
+            </button>
+          ) : null}
+          {sandbox ? (
+            <button
+              type="button"
+              onClick={() => {
+                retroAudio.playClick();
+                onGovernment?.();
+              }}
+            >
+              Government
             </button>
           ) : null}
           <button

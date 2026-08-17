@@ -15,6 +15,9 @@ interface GameHUDProps {
   equippedCount?: number;
   /** Optional living-world clock from NpcDirector */
   worldClock?: { dayStr: string; timeStr: string; weatherIcon?: string };
+  sandbox?: boolean;
+  muted?: boolean;
+  onToggleMute?: () => void;
 }
 
 /**
@@ -32,9 +35,11 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   onToggleInventory,
   equippedLabel = 'Fish Charm',
   equippedCount = 3,
-  worldClock
+  worldClock,
+  sandbox,
+  muted = false,
+  onToggleMute
 }) => {
-  const [muted, setMuted] = React.useState(false);
   const now = new Date();
   const timeStr = worldClock?.timeStr ?? now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const dayStr =
@@ -108,7 +113,9 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           </div>
         </div>
         <p className="hud-hint">
-          WASD move · I bag · Esc menu · {metersWalked}m walked
+          {sandbox
+            ? 'WASD · J jump · C claim · F flag · G gov · I bag'
+            : `WASD move · J jump · I bag · Esc menu · ${metersWalked}m walked`}
         </p>
       </div>
 
@@ -116,7 +123,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
       <button
         type="button"
         className="hud-mute pointer-events-auto"
-        onClick={() => setMuted(retroAudio.toggleMute())}
+        onClick={() => onToggleMute?.()}
         aria-label="Toggle sound"
       >
         {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}

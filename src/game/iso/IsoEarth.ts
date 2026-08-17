@@ -7,6 +7,8 @@ import { ISO_PALETTE, ISO_TILE_BY_ID, DistrictRealm } from './IsoTiles';
 import { ChunkWorld } from './ChunkWorld';
 import { DISTRICT_ORIGINS } from './WorldGen';
 import { npcDirector, NpcVisual } from '../npc/NpcDirector';
+import { retroAudio } from '../AudioSynth';
+import { sandboxVm, WorldFlag } from '../sandbox';
 
 export interface IsoPlayerAvatar {
   username: string;
@@ -47,6 +49,9 @@ export class IsoEarth {
   public playerFacing: 'ne' | 'nw' | 'se' | 'sw' = 'se';
   public isMoving = false;
   public walkFrame = 0;
+  /** Screen-pixel hop (positive = up). Local player only. */
+  public jumpY = 0;
+  public sandboxEnabled = false;
 
   public avatar: IsoPlayerAvatar = {
     username: 'Trainer',
@@ -78,7 +83,9 @@ export class IsoEarth {
   private waterPhase = 0;
   private smokePhase = 0;
   private interactLatch = false;
+  private jumpLatch = false;
   private npcBooted = false;
+  private jumpVel = 0;
 
   constructor(canvas: HTMLCanvasElement, realm: DistrictRealm = 'city_center') {
     this.canvas = canvas;
@@ -100,7 +107,25 @@ export class IsoEarth {
     this.playerRow = origin.y;
     this.findNearestWalkable();
     this.world.syncAround(this.playerCol, this.playerRow);
+    this.syncSandboxOverlays();
     this.syncCamera(snapCamera);
+  }
+
+  /** Overlay government land claims onto streamed chunks (WorldGen stays infinite). */
+  public syncSandboxOverlays() {
+    this.world.clearOverlays();
+    if (!this.sandboxEnabled) return;
+    for (const claim of sandboxVm.snap.claims) {
+      this.world.setOverlay(claim.col, claim.row, claim.tileId);
+    }
+  }
+
+  public tryJump() {
+    if (this.inputLocked || this.dialogueLocked || this.jumpY > 0) return false;
+    this.jumpVel = 280;
+    this.jumpY = 1;
+    retroAudio.playJump();
+    return true;
   }
 
   /** @deprecated finite maps removed — use warpToDistrict */
@@ -180,6 +205,7 @@ export class IsoEarth {
     this.waterPhase += delta;
     this.smokePhase += delta;
     this.moveCooldown = Math.max(0, this.moveCooldown - delta);
+    this.tickJump(delta);
 
     if (!this.npcBooted) {
       npcDirector.boot(this.avatar.username);
@@ -218,7 +244,7 @@ export class IsoEarth {
         (prev && 'npcId' in prev ? prev.npcId : prev && 'playerId' in prev ? prev.playerId : null);
     if (changed) this.onNpcPromptChange?.(prompt);
 
-    const wantInteract = !!(this.keys['KeyE'] || this.keys['Space']);
+    const wantInteract = !!(this.keys['KeyE'] || (this.keys['Space'] && prompt));
     if (wantInteract && !this.interactLatch && !this.dialogueLocked && !this.inputLocked && prompt) {
       this.interactLatch = true;
       if (prompt.kind === 'overhear') this.onInteractOverhear?.();
@@ -226,6 +252,11 @@ export class IsoEarth {
       else this.onInteractNpc?.(prompt.npcId);
     }
     if (!wantInteract) this.interactLatch = false;
+
+    const wantJump = !!(this.keys['KeyJ'] || (this.keys['Space'] && !prompt));
+    if (wantJump && !this.jumpLatch && !this.dialogueLocked && !this.inputLocked) this.tryJump();
+    if (!wantJump) this.jumpLatch = false;
+    else this.jumpLatch = true;
 
     let dx = 0;
     let dy = 0;
@@ -278,12 +309,33 @@ export class IsoEarth {
         this.walkFrame += 1;
         this.moveCooldown = 0.12;
         this.world.syncAround(this.playerCol, this.playerRow);
+        const tile = this.world.getTile(ncol, nrow);
+        if (tile === 'bridge' || tile === 'dock' || tile === 'shallow') retroAudio.playSplash();
+        else retroAudio.playFootstep();
+      } else {
+        retroAudio.playBump();
+        this.moveCooldown = 0.22;
       }
     } else if (dx === 0 && dy === 0) {
       this.isMoving = false;
     }
 
     this.syncCamera(false);
+  }
+
+  private tickJump(delta: number) {
+    if (this.jumpY <= 0 && this.jumpVel <= 0) {
+      this.jumpY = 0;
+      this.jumpVel = 0;
+      return;
+    }
+    this.jumpVel -= 980 * delta;
+    this.jumpY += this.jumpVel * delta;
+    if (this.jumpY <= 0) {
+      this.jumpY = 0;
+      this.jumpVel = 0;
+      retroAudio.playLand();
+    }
   }
 
   private tileWorld(col: number, row: number): { x: number; y: number } {
@@ -380,6 +432,9 @@ export class IsoEarth {
         this.drawProp(tileId, x, y);
       }
 
+      const flag = this.sandboxEnabled ? sandboxVm.flagAt(col, row) : null;
+      if (flag) this.drawWorldFlag(x, y, flag);
+
       if ((tileId === 'grass' || tileId === 'park' || tileId === 'tall_grass') && ((col * 7 + row * 13) % 11 + 11) % 11 === 0) {
         this.ctx.fillStyle = (col + row) % 2 === 0 ? '#f8f0f4' : '#f0a8c0';
         this.ctx.fillRect(x - 2, y - 4, 3, 3);
@@ -410,7 +465,8 @@ export class IsoEarth {
       this.avatar.shirt,
       this.avatar.pants,
       this.avatar.username,
-      this.isMoving
+      this.isMoving,
+      this.jumpY
     );
   }
 
@@ -580,10 +636,11 @@ export class IsoEarth {
     shirt: string,
     pants: string,
     name: string,
-    moving: boolean
+    moving: boolean,
+    hopPx = 0
   ) {
     const bob = moving ? Math.sin(this.walkFrame * 1.2) * 2 : 0;
-    const y = cy - 10 + bob;
+    const y = cy - 10 + bob - hopPx;
 
     this.ctx.fillStyle = 'rgba(40, 50, 30, 0.28)';
     this.ellipse(cx, cy + 8, 14, 6);
@@ -617,6 +674,28 @@ export class IsoEarth {
     this.ctx.font = 'bold 9px "Press Start 2P", monospace';
     this.ctx.textAlign = 'center';
     this.ctx.fillText(name.slice(0, 12), cx, y - 25);
+  }
+
+  private drawWorldFlag(cx: number, cy: number, flag: WorldFlag) {
+    const wave = Math.sin(this.waterPhase * 3 + flag.col * 0.4) * 3;
+    this.ctx.fillStyle = '#6b4423';
+    this.ctx.fillRect(cx - 2, cy - 38, 3, 40);
+    this.ctx.fillStyle = flag.colorA;
+    this.ctx.beginPath();
+    this.ctx.moveTo(cx + 1, cy - 38);
+    this.ctx.lineTo(cx + 22 + wave, cy - 32);
+    this.ctx.lineTo(cx + 22 + wave, cy - 20);
+    this.ctx.lineTo(cx + 1, cy - 24);
+    this.ctx.closePath();
+    this.ctx.fill();
+    this.ctx.fillStyle = flag.colorB;
+    this.ctx.fillRect(cx + 4, cy - 34, 8, 4);
+    this.ctx.fillStyle = 'rgba(60, 44, 28, 0.7)';
+    this.roundRect(cx - 22, cy - 52, 44, 12, 3);
+    this.ctx.fillStyle = '#f5efe4';
+    this.ctx.font = 'bold 7px "Press Start 2P", monospace';
+    this.ctx.textAlign = 'center';
+    this.ctx.fillText(flag.name.slice(0, 10), cx, cy - 43);
   }
 
   private drawSpeechBubble(cx: number, cy: number, text: string) {

@@ -1,5 +1,5 @@
 /**
- * Game Gate state machine — boot → menu → offline local world OR online server.
+ * Game Gate state machine — boot → menu → offline, sandbox, or online server.
  */
 
 import {
@@ -147,6 +147,15 @@ export class GameGate {
     this.emit();
   }
 
+  chooseSandbox() {
+    this.mode = 'sandbox';
+    this.phase = 'playing';
+    this.sessionToken = null;
+    this.character = null;
+    this.connectedServerName = null;
+    this.emit();
+  }
+
   persistOffline(partial: Partial<OfflineProfile>) {
     if (this.mode !== 'offline') return;
     this.offlineProfile = { ...(this.offlineProfile ?? defaultOfflineProfile()), ...partial, savedAt: Date.now() };
@@ -266,14 +275,18 @@ export class GameGate {
     this.emit();
   }
 
-  /** Online worlds must disconnect before an offline session starts. */
+  /** Online worlds must disconnect before an offline or sandbox session starts. */
   requestModeSwitch(next: PlayMode): { ok: true } | { ok: false; needLeaveServer: true } {
     if (this.phase === 'playing' && this.mode === next) return { ok: true };
-    if (this.phase === 'playing' && this.mode === 'online' && next === 'offline') {
+    if (this.phase === 'playing' && this.mode === 'online' && next !== 'online') {
       return { ok: false, needLeaveServer: true };
     }
     if (next === 'offline') {
       this.chooseOffline();
+      return { ok: true };
+    }
+    if (next === 'sandbox') {
+      this.chooseSandbox();
       return { ok: true };
     }
     this.chooseOnline();
