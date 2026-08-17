@@ -18,15 +18,15 @@
 
 Chunk-based open world — no finite square boundary:
 
-- `WorldGen.ts` — deterministic tile from world `(x, y)`
+- `WorldGen.ts` — designed procedural terrain from world `(x, y)`: biome regions, large forests, winding rivers, connected roads, villages & wilderness POIs
 - `ChunkWorld.ts` — load/unload `16×16` chunks around the player
-- Rivers, roads, and forests are continuous across chunk borders
+- All features are continuous across chunk borders (pure functions of world coords)
 - District travel warps to distant origins on the same infinite plane
 
 Key files:
 
 - `src/game/iso/IsoEarth.ts` — isometric engine + camera follow
-- `src/game/iso/WorldGen.ts` — infinite terrain
+- `src/game/iso/WorldGen.ts` — infinite designed terrain
 - `src/game/iso/ChunkWorld.ts` — chunk streaming
 - `src/game/iso/IsoTiles.ts` — tile catalog
 - `src/game/iso/TiledMapLoader.ts` — Tiled bridge (authored pockets / POIs)
