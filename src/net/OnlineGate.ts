@@ -5,7 +5,7 @@
 
 import { bpvApi } from '../api/BpvApiClient';
 import { GameServerInfo, OnlineCharacter, SavedServer, parseDirectAddress } from '../game/gate/types';
-import type { JoinResponse, WorldSnapshot } from './protocol';
+import type { WorldSnapshot } from './protocol';
 
 function delay(ms: number) {
   return new Promise(r => setTimeout(r, ms));
@@ -172,13 +172,13 @@ export class OnlineGate {
     return this.miss >= 3;
   }
 
-  async action(type: string, payload: Record<string, unknown> = {}) {
-    if (!this.sessionId) return { ok: false, error: 'no_session' };
+  action(type: string, payload: Record<string, unknown> = {}) {
+    if (!this.sessionId) return Promise.resolve({ ok: false, error: 'no_session' });
     return bpvApi.gameAction(this.sessionId, type, payload, this.target ?? undefined);
   }
 
-  async admin() {
-    if (!this.sessionId) return { ok: false, error: 'no_session' };
+  admin() {
+    if (!this.sessionId) return Promise.resolve({ ok: false, error: 'no_session' });
     return bpvApi.gameAdmin(this.sessionId, this.target ?? undefined);
   }
 
