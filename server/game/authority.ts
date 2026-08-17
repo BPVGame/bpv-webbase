@@ -122,7 +122,7 @@ export class WorldAuthority {
     password?: string;
     avatar?: { skin: string; hair: string; shirt: string; pants: string };
   }): { ok: true; session: Session } | { ok: false; error: string } {
-    if (opts.password && this.config.join_password && opts.password !== this.config.join_password) {
+    if (this.config.join_password && opts.password !== this.config.join_password) {
       return { ok: false, error: 'Invalid server password' };
     }
     const userKey = (opts.username || 'guest').slice(0, 32);

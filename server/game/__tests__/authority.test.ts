@@ -44,6 +44,14 @@ describe('WorldAuthority', () => {
     assert.equal(kicked.ok, true);
   });
 
+  it('rejects joins without the configured password', () => {
+    const world = new WorldAuthority({ ...loadDedicatedConfig(), join_password: 'secret', owner_username: 'Owner' });
+    const denied = world.join({ username: 'Alex' });
+    assert.equal(denied.ok, false);
+    const ok = world.join({ username: 'Alex', password: 'secret' });
+    assert.equal(ok.ok, true);
+  });
+
   it('does not grant owner to the first joiner when an owner username is configured', () => {
     const world = new WorldAuthority({ ...loadDedicatedConfig(), owner_username: 'Owner' });
     const first = world.join({ username: 'Alex' });
