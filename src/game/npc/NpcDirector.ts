@@ -174,6 +174,27 @@ export class NpcDirector {
       }));
   }
 
+  /** Online: reconcile important NPC poses from the dedicated server snapshot. */
+  applyServerNpcs(
+    list: Array<{
+      id: string;
+      col: number;
+      row: number;
+      activity?: string;
+      mood?: string;
+      talkingTo?: string | null;
+    }>
+  ) {
+    for (const s of list) {
+      const n = this.npcs.get(s.id);
+      if (!n) continue;
+      n.currentLocation = posFromWorld(s.col, s.row, CHUNK_SIZE);
+      if (s.talkingTo) n.currentActivity = 'talking';
+      else if (s.activity) n.currentActivity = s.activity;
+      if (s.mood) n.currentMood = s.mood;
+    }
+  }
+
   nearbyInteractable(range = 2): LivingNpc | null {
     let best: LivingNpc | null = null;
     let bestD = range + 0.01;

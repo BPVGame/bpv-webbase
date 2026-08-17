@@ -64,6 +64,7 @@ export class IsoEarth {
   public onInteractPlayer: ((playerId: string) => void) | null = null;
   public onNpcPromptChange: ((prompt: InteractPrompt) => void) | null = null;
   public dialogueLocked = false;
+  public inputLocked = false;
   public keys: Record<string, boolean> = {};
   public joystickDir: { x: number; y: number } = { x: 0, y: 0 };
   public camX = 0;
@@ -218,7 +219,7 @@ export class IsoEarth {
     if (changed) this.onNpcPromptChange?.(prompt);
 
     const wantInteract = !!(this.keys['KeyE'] || this.keys['Space']);
-    if (wantInteract && !this.interactLatch && !this.dialogueLocked && prompt) {
+    if (wantInteract && !this.interactLatch && !this.dialogueLocked && !this.inputLocked && prompt) {
       this.interactLatch = true;
       if (prompt.kind === 'overhear') this.onInteractOverhear?.();
       else if (prompt.kind === 'player') this.onInteractPlayer?.(prompt.playerId);
@@ -237,7 +238,7 @@ export class IsoEarth {
       dy = this.joystickDir.y;
     }
 
-    if ((dx !== 0 || dy !== 0) && this.moveCooldown <= 0) {
+    if ((dx !== 0 || dy !== 0) && this.moveCooldown <= 0 && !this.inputLocked) {
       let ncol = this.playerCol;
       let nrow = this.playerRow;
       if (dx > 0 && dy === 0) {

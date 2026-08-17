@@ -40,9 +40,11 @@ Classic 16-bit RPG + Real-world exploration + Online multiplayer + Tournaments +
 
 | Input | Action |
 | --- | --- |
-| WASD / arrows / D-pad | Move |
+| Main menu | PLAY / ONLINE / OFFLINE / SERVERS / SETTINGS / EXIT |
+| WASD / arrows / D-pad | Move (in world) |
+| `E` / Space | Talk / listen |
 | `I` or `Tab` | Open bag |
-| `Esc` / ☰ | Pause menu (travel, Fish Cards, tournaments…) |
+| `Esc` / ☰ | Pause menu (travel, Fish Cards, settings, leave world) |
 
 ## Stack
 
@@ -60,7 +62,14 @@ IsoEarth drawing & map JSON are inspired by isometric builders such as [isomiddl
 ```bash
 npm install
 npm run dev          # web client → http://localhost:3000
-npm run server       # local API → http://localhost:3001
+npm run server       # API + dedicated game shard → :3001
+npm run game-server  # alias of server (server.config.json)
+```
+
+Offline play does not require the server. Online / Servers uses `/api/game/*` (proxied from Vite).
+
+```bash
+npm run test:gate      # GameGate + dedicated-server authority
 ```
 
 Set `VITE_BPV_API_URL=http://localhost:3001` to point the client at the local server.

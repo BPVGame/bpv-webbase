@@ -12,6 +12,12 @@ interface PauseMenuProps {
   onDistrict: (realm: DistrictRealm) => void;
   currentRealm: DistrictRealm;
   playerName: string;
+  online?: boolean;
+  canAdmin?: boolean;
+  onSettings?: () => void;
+  onMainMenu?: () => void;
+  onAdmin?: () => void;
+  onSocial?: (kind: 'friends' | 'party' | 'guild') => void;
 }
 
 const NAV: Array<{ id: DexTab; label: string; icon: React.ReactNode }> = [
@@ -28,7 +34,13 @@ export const PauseMenu: React.FC<PauseMenuProps> = ({
   onNavigate,
   onDistrict,
   currentRealm,
-  playerName
+  playerName,
+  online,
+  canAdmin,
+  onSettings,
+  onMainMenu,
+  onAdmin,
+  onSocial
 }) => {
   if (!open) return null;
 
@@ -100,6 +112,44 @@ export const PauseMenu: React.FC<PauseMenuProps> = ({
         >
           Resume Adventure
         </button>
+        <div className="pause-extra">
+          <button
+            type="button"
+            onClick={() => {
+              retroAudio.playClick();
+              onSettings?.();
+            }}
+          >
+            Settings
+          </button>
+          {online ? (
+            <>
+              <button type="button" onClick={() => onSocial?.('friends')}>
+                Friends
+              </button>
+              <button type="button" onClick={() => onSocial?.('party')}>
+                Party
+              </button>
+              <button type="button" onClick={() => onSocial?.('guild')}>
+                Guild
+              </button>
+            </>
+          ) : null}
+          {canAdmin ? (
+            <button type="button" onClick={() => onAdmin?.()}>
+              Server
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => {
+              retroAudio.playClick();
+              onMainMenu?.();
+            }}
+          >
+            Main Menu
+          </button>
+        </div>
       </div>
     </div>
   );

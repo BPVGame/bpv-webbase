@@ -1,0 +1,20 @@
+{
+  "server_name": "BPV Local Shard",
+  "server_description": "Self-hosted BPV infinite world. Authoritative sessions, NPCs, and economy.",
+  "server_address": "127.0.0.1",
+  "server_port": 3001,
+  "max_players": 50,
+  "region": "local",
+  "pvp_enabled": false,
+  "pve_enabled": true,
+  "friendly_fire": false,
+  "world_seed": "havenbrook",
+  "world_size": "infinite",
+  "npc_ai_enabled": true,
+  "ello5_enabled": true,
+  "chat_enabled": true,
+  "voice_enabled": false,
+  "save_interval": 30,
+  "owner_username": "Trainer_Ash",
+  "join_password": ""
+}

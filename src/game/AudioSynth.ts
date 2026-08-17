@@ -17,6 +17,11 @@ class RetroAudioSynth {
     return this.isMuted;
   }
 
+  public setMuted(muted: boolean) {
+    this.isMuted = muted;
+    return this.isMuted;
+  }
+
   public playFootstep() {
     if (this.isMuted) return;
     this.initCtx();
@@ -132,6 +137,58 @@ class RetroAudioSynth {
       osc.start(now + i * 0.08);
       osc.stop(now + i * 0.08 + 0.18);
     });
+  }
+
+  private musicNodes: Array<{ osc: OscillatorNode; gain: GainNode }> = [];
+  private ambientId: ReturnType<typeof setInterval> | null = null;
+
+  public startMenuTheme() {
+    if (this.isMuted) return;
+    this.initCtx();
+    if (!this.ctx) return;
+    this.stopMenuTheme();
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const melody = [392, 440, 523.25, 440, 349.23, 392];
+    melody.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = i % 2 ? 'triangle' : 'square';
+      osc.frequency.value = freq;
+      gain.gain.value = 0.04;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      this.musicNodes.push({ osc, gain });
+    });
+    this.ambientId = setInterval(() => {
+      if (this.isMuted || !this.ctx) return;
+      const t = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(180, t);
+      osc.frequency.exponentialRampToValueAtTime(90, t + 1.2);
+      gain.gain.setValueAtTime(0.03, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 1.2);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(t);
+      osc.stop(t + 1.2);
+    }, 2400);
+  }
+
+  public stopMenuTheme() {
+    for (const n of this.musicNodes) {
+      try {
+        n.osc.stop();
+      } catch {
+        /* already stopped */
+      }
+    }
+    this.musicNodes = [];
+    if (this.ambientId) clearInterval(this.ambientId);
+    this.ambientId = null;
   }
 }
 

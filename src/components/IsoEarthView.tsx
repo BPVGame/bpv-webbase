@@ -5,12 +5,14 @@ import { multiplayerSync } from '../game/MultiplayerSync';
 import { npcDirector } from '../game/npc/NpcDirector';
 import { RpgDialogueStage } from './RpgDialogueStage';
 import { NpcDebugPanel } from './NpcDebugPanel';
+import { onlineGate } from '../net/OnlineGate';
 import { StoryBanner } from '../game/npc/dialogue/types';
 
 export interface IsoEarthViewHandle {
   loadDistrict: (realm: DistrictRealm) => void;
   setJoystick: (dir: { x: number; y: number }) => void;
   getWorldTime: () => ReturnType<typeof npcDirector.getWorldTime>;
+  getPose: () => { col: number; row: number } | null;
 }
 
 interface IsoEarthViewProps {
@@ -24,10 +26,13 @@ interface IsoEarthViewProps {
   onDistrictChange?: (district: DistrictRealm) => void;
   onNpcTalked?: (npcId: string) => void;
   visible: boolean;
+  /** preview = menu background (no net). offline = local NPCs only. online = server snapshot + presence. */
+  netMode?: 'preview' | 'offline' | 'online';
+  interactive?: boolean;
 }
 
 export const IsoEarthView = forwardRef<IsoEarthViewHandle, IsoEarthViewProps>(
-  ({ avatar, onDistrictChange, onNpcTalked, visible }, ref) => {
+  ({ avatar, onDistrictChange, onNpcTalked, visible, netMode = 'offline', interactive = true }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const earthRef = useRef<IsoEarth | null>(null);
     const remotesRef = useRef<RemotePlayer[]>([]);
@@ -49,7 +54,11 @@ export const IsoEarthView = forwardRef<IsoEarthViewHandle, IsoEarthViewProps>(
       setJoystick: (dir: { x: number; y: number }) => {
         if (earthRef.current) earthRef.current.joystickDir = dir;
       },
-      getWorldTime: () => npcDirector.getWorldTime()
+      getWorldTime: () => npcDirector.getWorldTime(),
+      getPose: () => {
+        const e = earthRef.current;
+        return e ? { col: e.playerCol, row: e.playerRow } : null;
+      }
     }));
 
     useEffect(() => {
@@ -87,13 +96,6 @@ export const IsoEarthView = forwardRef<IsoEarthViewHandle, IsoEarthViewProps>(
       earthRef.current = earth;
       earth.start();
 
-      multiplayerSync.start(avatar.username, {
-        onUpdate: state => {
-          remotesRef.current = state.nearby;
-          earth.setRemotePlayers(state.nearby);
-        }
-      });
-
       const onKey = (e: KeyboardEvent) => {
         if (e.code === 'F3') {
           e.preventDefault();
@@ -115,20 +117,58 @@ export const IsoEarthView = forwardRef<IsoEarthViewHandle, IsoEarthViewProps>(
     }, [avatar]);
 
     useEffect(() => {
-      if (earthRef.current) earthRef.current.dialogueLocked = dialogueOpen;
-    }, [dialogueOpen]);
+      const earth = earthRef.current;
+      if (!earth) return;
+      earth.inputLocked = !interactive;
+      earth.dialogueLocked = !interactive || dialogueOpen;
+    }, [interactive, dialogueOpen]);
+
+    useEffect(() => {
+      if (netMode !== 'online') {
+        multiplayerSync.stop();
+        earthRef.current?.setRemotePlayers([]);
+        return;
+      }
+      multiplayerSync.start(avatar.username, {
+        onUpdate: state => {
+          remotesRef.current = state.nearby;
+          earthRef.current?.setRemotePlayers(state.nearby);
+        }
+      });
+      return () => multiplayerSync.stop();
+    }, [netMode, avatar.username]);
 
     useEffect(() => {
       if (!visible) return;
       const id = setInterval(() => {
         const e = earthRef.current;
         if (!e) return;
-        multiplayerSync.updatePose(realm, e.playerCol, e.playerRow);
+        if (netMode === 'online') {
+          multiplayerSync.updatePose(realm, e.playerCol, e.playerRow);
+          void (async () => {
+            const snap = await onlineGate.snapshot();
+            if (!snap) return;
+            npcDirector.applyServerNpcs(snap.npcs);
+            const others = snap.players.filter(p => p.username !== avatar.username);
+            if (others.length) {
+              const mapped = others.map(p => ({
+                id: p.id,
+                username: p.username,
+                col: p.col,
+                row: p.row,
+                skin: p.skin,
+                shirt: p.shirt
+              }));
+              remotesRef.current = mapped;
+              e.setRemotePlayers(mapped);
+            }
+          })();
+        }
         const next = npcDirector.dialogueRt.consumeBanners();
         if (next.length) setBanners(b => [...b, ...next].slice(-4));
       }, 1000);
       return () => clearInterval(id);
-    }, [realm, visible]);
+    }, [realm, visible, netMode, avatar.username]);
 
     const hint =
       prompt && !dialogueOpen
@@ -142,7 +182,7 @@ export const IsoEarthView = forwardRef<IsoEarthViewHandle, IsoEarthViewProps>(
     return (
       <div className={`game-stage ${visible ? 'is-visible' : 'is-hidden'}`}>
         <canvas ref={canvasRef} className="game-canvas" />
-        {hint ? <div className="npc-interact-hint">{hint}</div> : null}
+        {hint && interactive ? <div className="npc-interact-hint">{hint}</div> : null}
         {banners.map(b => (
           <div key={b.id} className={`rpg-story-banner is-${b.kind}`}>
             <strong>{b.title}</strong>
